@@ -1,81 +1,84 @@
 # ASI Verifiable Engineering
 
-**Status:** bootstrap draft (`0.1.0-draft.2`). Do not treat this branch as adopted policy until the pull request is independently verified, merged, and tagged.
+**Status:** bootstrap draft (`0.1.0-draft.2`). The pull request remains blocked until the solo-operator evidence path is exercised, branch protection is active, and the owner explicitly authorizes merge.
 
-ASI Verifiable Engineering is an Agent Skill and verification framework for approving software changes through measured evidence rather than trust or exhaustive manual reading.
+ASI Verifiable Engineering is an Agent Skill and verification framework designed for one human owner who delegates implementation and auditing to separate AI chats.
 
-## Core rule
+## Objective
 
-A change is not approved because a human or AI read it, explained it, or wrote `APPROVED`. A specific integrable commit is approved only when the decision engine derives that result from evidence bound to the exact policy, diff, commands, artifacts, package, review, and target observation.
+Future chats should be able to modify software safely without forcing the owner to inspect every changed line.
 
-Line-by-line review is not the default gate. High-risk changes require targeted human review. Forensic reading activates only when integrity, scope, binary, or contradictory-evidence signals require it.
+A change is not approved because an AI wrote it, explained it, reviewed it, or placed `APPROVED` in a file. The decision engine evaluates the exact integrable commit from measured commands, policy, diff, artifacts, rollback, audit context, and target observation.
 
-## Assurance path
+## Solo-Operator Mode
 
-The pull-request workflow has an explicit reachable path:
+The model separates four roles:
 
-1. Technical and security gates produce E6 / T4 / I2.
-2. A human collaborator distinct from the builder approves the current head with `ASI-TARGETED-REVIEW-V1`, producing I3.
-3. The same approval may link an external target-environment report with `ASI-TARGET-OBSERVATION-V1`.
-4. CI downloads that report from GitHub Raw, verifies its SHA-256, age, reviewer, repository, head, target environment, result, and package digest.
-5. A valid observation promotes the manifest to E7 / T5.
-6. Effective `main` protection is verified through the GitHub API.
-7. `evaluate_change.py` independently derives the final decision. The manifest's written decision remains non-authoritative.
+1. **Builder chat:** may modify code and owns a stable `builder_context_id`.
+2. **Auditor chat:** a different context, read-only, with a distinct `auditor_context_id` and `write_actions: []`.
+3. **CI:** executes commands, recomputes bindings, checks context separation, and derives the decision.
+4. **Owner:** authorizes high-risk merge after the engine derives `APPROVED`; no line-by-line inspection is required.
 
-## Target observation contract
+The same GitHub account may publish builder and auditor evidence. Independence is established by different chat contexts, read-only behavior, exact commit binding, external evidence, and CI verification—not merely by different usernames.
 
-The independent reviewer executes the exact verified package in `chatgpt`, `codex`, or `openai-api`, creates a JSON report following:
+## Independence and authorization
+
+- `I0`: builder self-assessment.
+- `I1`: separate read-only AI audit context.
+- `I2`: deterministic tools and CI.
+- `I3`: external human or institutional verifier, reserved for critical work.
+
+- `H0`: automatic eligible approval for low/medium risk.
+- `H1`: owner manually merges an approved high-risk head.
+- `H2`: dual human authorization for critical risk.
+
+## Approval path
+
+### Low and medium
+
+The policy may permit automatic approval after E6/T4/I1+I2, all required gates, tested rollback, valid bindings, and no incompatible residual risk.
+
+### High
+
+The engine may derive `APPROVED` after:
+
+- all technical and governance gates pass;
+- a separate AI context produces a valid read-only audit;
+- the exact Skill package is observed in ChatGPT, Codex, or OpenAI API;
+- evidence reaches E7/T5/I1+I2;
+- no blockers remain.
+
+The owner then performs H1 by manually merging the approved head.
+
+### Critical
+
+Critical changes require E8/T6/I1+I2+I3 and H2. They cannot be approved by a solo operator without qualified external human participation.
+
+## Audit attestation
+
+The auditor publishes a GitHub PR review comment containing:
+
+```text
+ASI-SOLO-AUDIT-V1
+ASI-AUDIT-EVIDENCE-URL: https://raw.githubusercontent.com/...
+ASI-AUDIT-EVIDENCE-SHA256: sha256:<digest>
+```
+
+The referenced JSON follows:
 
 ```text
 skills/asi-verifiable-engineering/assets/target-observation.example.json
 ```
 
-The report must be publicly retrievable through `raw.githubusercontent.com`. The approval body must contain:
+CI rejects the attestation when:
 
-```text
-ASI-TARGETED-REVIEW-V1
-ASI-TARGET-OBSERVATION-V1
-ASI-TARGET-EVIDENCE-URL: https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>.json
-ASI-TARGET-EVIDENCE-SHA256: sha256:<64-lowercase-hex>
-```
-
-The observation expires after seven days and is invalidated by any head or package-digest change.
-
-## Branch protection prerequisite
-
-The repository secret `ASI_GITHUB_ADMIN_TOKEN` must contain a fine-grained token with read access to repository administration metadata. CI verifies that `main` requires:
-
-- at least one approval;
-- stale-review dismissal;
-- CODEOWNERS review;
-- strict required status checks;
-- `Verify measured gates and derive decision`;
-- admin enforcement;
-- conversation resolution;
-- no force pushes or deletion.
-
-## Workflows
-
-- `.github/workflows/validate-skill.yml` evaluates pull requests and review events.
-- `.github/workflows/main-integrity.yml` evaluates commits after merge and verifies the associated PR attestations. It does not invent a synthetic PR number.
-
-## Validation
-
-The blocked example must remain blocked:
-
-```bash
-python tools/validate_skill_package.py skills/asi-verifiable-engineering
-python skills/asi-verifiable-engineering/scripts/validate_policy.py .asi/policy.yml
-python skills/asi-verifiable-engineering/scripts/validate_evidence.py \
-  skills/asi-verifiable-engineering/assets/evidence-manifest.example.json
-python skills/asi-verifiable-engineering/scripts/evaluate_change.py \
-  .asi/policy.yml \
-  skills/asi-verifiable-engineering/assets/evidence-manifest.example.json \
-  --expect BLOCKED
-python -m unittest discover -s tests -p 'test_*.py' -v
-```
-
-`tests/test_birth02_promotion.py` constructs complete high-risk E7 / T5 / I3 evidence and proves that the engine can derive `APPROVED` even when the manifest still claims `BLOCKED`.
+- builder and auditor context IDs match;
+- the audit is not read-only;
+- any write action is reported;
+- the head is stale;
+- the URL or digest is invalid;
+- the target observation does not match the exact package digest;
+- the evidence is too old or otherwise inconsistent.
 
 ## Repository layout
 
@@ -98,18 +101,39 @@ tests/
 tools/
 ```
 
-## Authority during bootstrap
+## Measured controls
 
-Until this draft is adopted:
+The strict profile includes:
+
+- Git identity and change budget;
+- protected canonical branch;
+- deterministic formatting, lint, and type checking;
+- package validation and reproducible archive;
+- unit, integration, and adversarial honesty tests;
+- secret and supply-chain scans;
+- source rollback rehearsal;
+- separate-context audit;
+- target-environment observation;
+- cryptographic binding validation;
+- evidence-derived decision.
+
+A GitHub workflow step shown as successful because it collected evidence is not necessarily a passed gate. The generated manifest is the source of truth.
+
+## Current authority
+
+Until this draft is merged and tagged:
 
 1. Notion doctrine version `1.2` remains the adopted source.
-2. This repository is the candidate canonical implementation.
-3. A tagged GitHub release becomes normative only after explicit adoption.
+2. This repository is the candidate executable implementation.
+3. A tagged release becomes canonical only after explicit owner adoption.
 
-Notion source:
+## Decisions
 
-- https://app.notion.com/p/3b3eb559c05c81b5b971ee384164aa10
+- `APPROVED`
+- `CONDITIONAL`
+- `BLOCKED`
+- `REJECTED`
 
-## Non-goals
+`NO VERIFICADO` is an evidence state, not a final decision.
 
-The Skill does not make an AI infallible, prove the absence of every defect, or remove targeted human governance for high-risk work. It makes approval claims measurable, reproducible, independently reviewable, and difficult to falsify.
+The system does not prove that software is perfect. It makes approval claims measurable, reproducible, attributable, and difficult for a builder chat to falsify.
