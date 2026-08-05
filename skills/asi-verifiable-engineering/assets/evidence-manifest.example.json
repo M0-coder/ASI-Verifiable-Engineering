@@ -1,150 +1,169 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "manifest_version": 1,
-  "repository": "owner/repository",
-  "branch": "feature/example",
-  "base_commit": "0000000000000000000000000000000000000000",
-  "evaluated_commit": "1111111111111111111111111111111111111111",
-  "integrable_commit": "1111111111111111111111111111111111111111",
-  "policy_version": 1,
-  "policy_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-  "diff_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-  "doctrine_version": "1.2",
-  "skill_version": "0.1.0-draft.2",
-  "risk": "medium",
-  "evidence_level": "E6",
-  "assurance_level": "T4",
-  "independence": [
-    "I1",
-    "I2"
-  ],
-  "environment": {
-    "os": "linux",
-    "architecture": "x86_64",
-    "runtime": "python-3.12",
-    "package_manager": "stdlib",
-    "lockfile_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
-  },
-  "changed_files": [
-    "src/example.py",
-    "tests/test_example.py"
-  ],
-  "change_budget": {
-    "expected_files": [
-      "src/example.py",
-      "tests/test_example.py"
-    ],
-    "unexpected_files": [],
-    "within_budget": true
-  },
-  "commands": [
-    {
-      "name": "unit_tests",
-      "command": "python -m unittest",
-      "started_at": "2026-08-05T15:00:00Z",
-      "duration_seconds": 1.0,
-      "exit_code": 0,
-      "artifact": "artifacts/unit-tests.xml",
-      "artifact_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
-    }
-  ],
-  "gates": {
-    "integrity": "passed",
-    "format_check": "passed",
-    "lint": "passed",
-    "typecheck": "passed",
-    "build": "passed",
-    "unit_tests": "passed",
-    "integration_tests": "passed",
-    "secret_scan": "passed",
-    "dependency_scan": "passed",
-    "independent_audit": "passed"
-  },
-  "gate_evidence": {
-    "integrity": {
-      "artifact": "artifacts/ci-summary.json",
-      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
-    },
-    "format_check": {
-      "artifact": "artifacts/ci-summary.json",
-      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
-    },
-    "lint": {
-      "artifact": "artifacts/ci-summary.json",
-      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
-    },
-    "typecheck": {
-      "artifact": "artifacts/ci-summary.json",
-      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
-    },
-    "build": {
-      "artifact": "artifacts/ci-summary.json",
-      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
-    },
-    "unit_tests": {
-      "artifact": "artifacts/unit-tests.xml",
-      "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
-    },
-    "integration_tests": {
-      "artifact": "artifacts/ci-summary.json",
-      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
-    },
-    "secret_scan": {
-      "artifact": "artifacts/ci-summary.json",
-      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
-    },
-    "dependency_scan": {
-      "artifact": "artifacts/ci-summary.json",
-      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
-    },
-    "independent_audit": {
-      "artifact": "artifacts/audit.json",
-      "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
-    }
-  },
-  "test_honesty": {
-    "method": "fails_on_base_passes_on_head",
-    "evidence": "artifacts/test-honesty.txt",
-    "digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
-  },
-  "review": {
-    "builder": "builder-agent",
-    "auditor": "auditor-agent",
-    "same_context": false,
-    "human_review": {
-      "required": false,
-      "completed": false,
-      "mode": "none"
-    }
-  },
+  "approved_by": [],
   "artifacts": [
     {
-      "path": "artifacts/ci-summary.json",
-      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
-      "producer": "ci"
+      "digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+      "path": "gates/unit_tests.json",
+      "producer": "example-ci"
     },
     {
-      "path": "artifacts/unit-tests.xml",
-      "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
-      "producer": "ci"
-    },
-    {
-      "path": "artifacts/audit.json",
-      "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
-      "producer": "independent-auditor"
+      "digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+      "path": "gates/unit_tests.log",
+      "producer": "example-ci"
     }
   ],
-  "unverified": [],
-  "residual_risks": [],
-  "decision": "APPROVED",
-  "conditions": [],
-  "rollback": {
-    "reference": "docs/rollback.md",
-    "tested": true
+  "assurance_level": "T3",
+  "base_commit": "0000000000000000000000000000000000000000",
+  "branch": "feature/example",
+  "change_budget": {
+    "additions": 3,
+    "allow_binary_files": false,
+    "base_commit": "0000000000000000000000000000000000000000",
+    "binary_files": [],
+    "budget_version": 1,
+    "changed_files": [
+      "src/example.py"
+    ],
+    "changed_lines": 4,
+    "deletions": 1,
+    "evaluated_commit": "2222222222222222222222222222222222222222",
+    "expected_files": [
+      "src/example.py"
+    ],
+    "forbidden_files": [],
+    "forensic_triggers": [],
+    "max_changed_lines": 50,
+    "max_files": 2,
+    "missing_expected_files": [],
+    "reference": ".asi/change-budget.json",
+    "unexpected_files": [],
+    "violations": [],
+    "within_budget": true
   },
-  "approved_by": [
-    "auditor-agent"
+  "changed_files": [
+    "src/example.py"
   ],
+  "commands": [
+    {
+      "argv": [
+        "python",
+        "-m",
+        "unittest"
+      ],
+      "command": "python -m unittest",
+      "duration_seconds": 1.0,
+      "exit_code": 0,
+      "finished_at": "2026-08-05T15:00:01Z",
+      "log_artifact": "gates/unit_tests.log",
+      "log_digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+      "name": "unit_tests",
+      "result_artifact": "gates/unit_tests.json",
+      "result_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+      "started_at": "2026-08-05T15:00:00Z"
+    }
+  ],
+  "conditions": [],
   "created_at": "2026-08-05T15:00:00Z",
-  "expires_at": "2026-08-12T15:00:00Z"
+  "decision": "BLOCKED",
+  "diff_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+  "doctrine_version": "1.2",
+  "environment": {
+    "architecture": "x86_64",
+    "lockfile_digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+    "os": "linux",
+    "package_manager": "stdlib",
+    "runtime": "python-3.12"
+  },
+  "evaluated_commit": "2222222222222222222222222222222222222222",
+  "evidence_level": "E5",
+  "expires_at": "2026-08-12T15:00:00Z",
+  "forensic_triggers": [],
+  "gate_evidence": {
+    "build": {
+      "justification": "Example evidence is intentionally incomplete."
+    },
+    "dependency_scan": {
+      "justification": "Example evidence is intentionally incomplete."
+    },
+    "format_check": {
+      "justification": "Example evidence is intentionally incomplete."
+    },
+    "independent_audit": {
+      "justification": "Independent audit has not been completed."
+    },
+    "integration_tests": {
+      "justification": "Example evidence is intentionally incomplete."
+    },
+    "integrity": {
+      "justification": "Example evidence is intentionally incomplete."
+    },
+    "lint": {
+      "justification": "Example evidence is intentionally incomplete."
+    },
+    "secret_scan": {
+      "justification": "Example evidence is intentionally incomplete."
+    },
+    "typecheck": {
+      "justification": "Example evidence is intentionally incomplete."
+    },
+    "unit_tests": {
+      "log_artifact": "gates/unit_tests.log",
+      "log_digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+      "result_artifact": "gates/unit_tests.json",
+      "result_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+    }
+  },
+  "gates": {
+    "build": "not_verified",
+    "dependency_scan": "not_verified",
+    "format_check": "not_verified",
+    "independent_audit": "not_verified",
+    "integration_tests": "not_verified",
+    "integrity": "not_verified",
+    "lint": "not_verified",
+    "secret_scan": "not_verified",
+    "typecheck": "not_verified",
+    "unit_tests": "passed"
+  },
+  "head_commit": "1111111111111111111111111111111111111111",
+  "independence": [
+    "I2"
+  ],
+  "integrable_commit": "2222222222222222222222222222222222222222",
+  "manifest_version": 2,
+  "policy_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "policy_version": 1,
+  "repository": "owner/repository",
+  "residual_risks": [
+    "This example is not eligible for approval."
+  ],
+  "review": {
+    "auditor": null,
+    "builder": "builder-agent",
+    "human_review": {
+      "completed": false,
+      "mode": "none",
+      "required": false
+    },
+    "same_context": false
+  },
+  "risk": "medium",
+  "rollback": {
+    "reference": "Close the pull request.",
+    "tested": false
+  },
+  "skill_version": "0.1.0-draft.3",
+  "test_honesty": {
+    "digest": null,
+    "evidence": null,
+    "method": "not_verified",
+    "result_artifact": null,
+    "result_digest": null
+  },
+  "unverified": [
+    "Most required gates are not verified.",
+    "Independent audit is pending."
+  ],
+  "workflow_run": "https://example.invalid/actions/runs/1"
 }
