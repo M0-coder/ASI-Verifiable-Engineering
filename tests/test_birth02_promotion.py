@@ -131,7 +131,6 @@ class ReachableApprovalTests(unittest.TestCase):
                 "unverified": [],
                 "residual_risks": [],
                 "conditions": [],
-                "change_budget": {"within_budget": True, "violations": []},
                 "decision": "BLOCKED",
                 "approved_by": [],
                 "rollback": {"reference": "git revert", "tested": True},
