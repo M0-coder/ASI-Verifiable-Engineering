@@ -1,0 +1,105 @@
+version: 1
+
+doctrine:
+  name: ASI Verifiable Engineering
+  version: "1.2"
+  skill_version: "0.1.0-draft.1"
+  repository: morimilpabfelon-cell/ASI-Verifiable-Engineering
+
+repository:
+  default_risk: medium
+  policy_owner: "REPLACE_WITH_OWNER"
+  protected_branches:
+    - main
+  protected_paths:
+    - ".github/workflows/**"
+    - ".asi/**"
+    - "infra/**"
+    - "migrations/**"
+    - "security/**"
+    - "auth/**"
+    - "payments/**"
+
+commands:
+  install: "REPLACE_WITH_CANONICAL_INSTALL_COMMAND"
+  format_check: "REPLACE_WITH_FORMAT_CHECK_COMMAND"
+  lint: "REPLACE_WITH_LINT_COMMAND"
+  typecheck: "REPLACE_WITH_TYPECHECK_OR_NOT_APPLICABLE"
+  build: "REPLACE_WITH_BUILD_COMMAND"
+  unit_tests: "REPLACE_WITH_UNIT_TEST_COMMAND"
+  integration_tests: "REPLACE_WITH_INTEGRATION_TEST_COMMAND"
+  security_scan: "REPLACE_WITH_SECURITY_SCAN_COMMAND"
+
+required_gates:
+  format_check: true
+  lint: true
+  typecheck: true
+  build: true
+  unit_tests: true
+  integration_tests: true
+  secret_scan: true
+  dependency_scan: true
+  independent_audit: true
+
+risk_escalation:
+  high:
+    - "auth/**"
+    - "payments/**"
+    - "migrations/**"
+    - ".github/workflows/**"
+    - "infra/**"
+    - "dependencies/**"
+  critical:
+    - "keys/**"
+    - "production-access/**"
+    - "destructive-operations/**"
+
+assurance:
+  low:
+    minimum_t: T4
+    independence:
+      - I1
+      - I2
+  medium:
+    minimum_t: T4
+    independence:
+      - I1
+      - I2
+  high:
+    minimum_t: T5
+    independence:
+      - I2
+      - I3
+  critical:
+    minimum_t: T6
+    independence:
+      - I2
+      - I3
+    dual_human_approval: true
+
+evidence:
+  directory: ".asi/evidence"
+  retention_days: 90
+  require_commit_sha: true
+  require_exit_codes: true
+  require_artifact_digests: true
+
+deployment:
+  build_once_promote_same_artifact: true
+  require_rollback: true
+  require_canary_for_high_risk: true
+  autonomous_production_changes: false
+
+agent_permissions:
+  direct_push_protected_branch: false
+  self_approve: false
+  modify_policy_in_same_change: false
+  disable_required_gate: false
+  access_production_secrets: false
+  irreversible_action_without_human: false
+
+exceptions:
+  allow_permanent: false
+  require_owner: true
+  require_expiry: true
+  require_compensating_controls: true
