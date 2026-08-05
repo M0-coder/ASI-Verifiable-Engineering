@@ -29,6 +29,7 @@
     "skills/asi-verifiable-engineering/references/core-doctrine.md",
     "skills/asi-verifiable-engineering/scripts/check_format.py",
     "skills/asi-verifiable-engineering/scripts/evaluate_change.py",
+    "skills/asi-verifiable-engineering/scripts/finalize_measured_evidence.py",
     "skills/asi-verifiable-engineering/scripts/generate_ci_evidence.py",
     "skills/asi-verifiable-engineering/scripts/run_gate.py",
     "skills/asi-verifiable-engineering/scripts/scan_secrets.py",
@@ -36,6 +37,8 @@
     "skills/asi-verifiable-engineering/scripts/validate_evidence.py",
     "skills/asi-verifiable-engineering/scripts/validate_policy.py",
     "skills/asi-verifiable-engineering/scripts/verify_change_budget.py",
+    "skills/asi-verifiable-engineering/scripts/verify_installability.py",
+    "skills/asi-verifiable-engineering/scripts/verify_source_rollback.py",
     "tests/__init__.py",
     "tests/test_adversarial_controls.py",
     "tests/test_integration_evidence.py",
@@ -48,8 +51,8 @@
     "keys/**",
     "secrets/**"
   ],
-  "max_files": 42,
-  "max_changed_lines": 8000,
+  "max_files": 45,
+  "max_changed_lines": 9000,
   "allow_binary_files": false,
   "stop_conditions": [
     "Any changed path is absent from expected_paths.",
