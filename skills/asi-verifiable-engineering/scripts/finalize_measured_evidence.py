@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Finalize measured technical, recovery, and package evidence claims."""
+"""Finalize measured technical, recovery, package, and solo-operator claims."""
 
 from __future__ import annotations
 
@@ -13,6 +13,11 @@ EXTERNAL_PROMOTION_GATES = {
     "independent_audit",
     "target_environment_observation",
 }
+LEGACY_AUDIT_RISKS = {
+    "Independent targeted human review has not been completed.",
+    "Independent targeted human review is pending.",
+}
+SOLO_AUDIT_RISK = "Independent separate-context AI audit has not been completed."
 
 
 def _measured_gate(manifest: dict[str, Any], name: str) -> dict[str, Any]:
@@ -79,6 +84,35 @@ def _finalize_preoperational_level(manifest: dict[str, Any]) -> None:
         manifest["assurance_level"] = "T3"
 
 
+def _normalize_solo_operator_state(manifest: dict[str, Any]) -> None:
+    review = manifest.get("review")
+    if not isinstance(review, dict):
+        raise ValueError("Manifest review object is missing.")
+    review["audit_review"] = {
+        "required": True,
+        "completed": False,
+        "mode": "separate_ai_read_only",
+    }
+    review["human_review"] = {
+        "required": True,
+        "completed": False,
+        "mode": "owner_merge",
+    }
+
+    residual = manifest.get("residual_risks")
+    normalized: list[str] = []
+    if isinstance(residual, list):
+        normalized = [
+            item
+            for item in residual
+            if isinstance(item, str) and item not in LEGACY_AUDIT_RISKS
+        ]
+    gates = manifest.get("gates")
+    if isinstance(gates, dict) and gates.get("independent_audit") != "passed":
+        normalized.append(SOLO_AUDIT_RISK)
+    manifest["residual_risks"] = sorted(set(normalized))
+
+
 def finalize(
     manifest: dict[str, Any],
     evidence_dir: Path,
@@ -121,6 +155,7 @@ def finalize(
         "limitations": package_report.get("limitations", []),
     }
     _finalize_preoperational_level(manifest)
+    _normalize_solo_operator_state(manifest)
     return manifest
 
 
