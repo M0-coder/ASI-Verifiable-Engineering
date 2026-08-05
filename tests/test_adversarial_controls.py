@@ -10,7 +10,8 @@ from pathlib import Path
 from types import ModuleType
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = ROOT / "skills" / "asi-verifiable-engineering" / "scripts"
+SKILL_DIR = ROOT / "skills" / "asi-verifiable-engineering"
+SCRIPTS = SKILL_DIR / "scripts"
 
 
 def load_module(name: str, path: Path) -> ModuleType:
@@ -32,6 +33,14 @@ supply_chain = load_module(
     SCRIPTS / "scan_supply_chain.py",
 )
 secret_scan = load_module("secret_scan_test", SCRIPTS / "scan_secrets.py")
+rollback_control = load_module(
+    "rollback_control_test",
+    SCRIPTS / "verify_source_rollback.py",
+)
+installability = load_module(
+    "installability_test",
+    SCRIPTS / "verify_installability.py",
+)
 
 
 class AdversarialControlTests(unittest.TestCase):
@@ -123,6 +132,34 @@ class AdversarialControlTests(unittest.TestCase):
 
         self.assertFalse(report["passed"])
         self.assertEqual("github_classic_token", report["findings"][0]["pattern"])
+
+    def test_source_rollback_restores_exact_base_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self._init_repo(root)
+            source = root / "source.txt"
+            source.write_text("base\n", encoding="utf-8")
+            self._git(root, "add", ".")
+            self._git(root, "commit", "-qm", "base")
+            base = self._git(root, "rev-parse", "HEAD")
+
+            source.write_text("changed\n", encoding="utf-8")
+            (root / "new.txt").write_text("new\n", encoding="utf-8")
+            self._git(root, "add", ".")
+            self._git(root, "commit", "-qm", "change")
+            evaluated = self._git(root, "rev-parse", "HEAD")
+            report = rollback_control.verify_rollback(root, base, evaluated)
+
+        self.assertTrue(report["passed"])
+        self.assertTrue(report["restored_base_tree"])
+        self.assertEqual("source_tree", report["scope"])
+
+    def test_portable_skill_package_is_deterministic(self) -> None:
+        report = installability.verify_installability(SKILL_DIR)
+        self.assertTrue(report["passed"])
+        self.assertTrue(report["deterministic_rebuild"])
+        self.assertTrue(report["content_preserved_after_extract"])
+        self.assertGreater(report["file_count"], 10)
 
 
 if __name__ == "__main__":
