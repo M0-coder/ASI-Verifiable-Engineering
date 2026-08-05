@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify effective GitHub branch protection for the canonical branch."""
+"""Verify solo-operator GitHub branch protection for the canonical branch."""
 
 from __future__ import annotations
 
@@ -19,17 +19,6 @@ def _enabled(value: Any) -> bool:
 
 def evaluate_protection(data: dict[str, Any], expected_check: str) -> dict[str, Any]:
     missing: list[str] = []
-
-    reviews = data.get("required_pull_request_reviews")
-    if not isinstance(reviews, dict):
-        missing.append("required_pull_request_reviews")
-    else:
-        if int(reviews.get("required_approving_review_count", 0)) < 1:
-            missing.append("at_least_one_approval")
-        if reviews.get("dismiss_stale_reviews") is not True:
-            missing.append("dismiss_stale_reviews")
-        if reviews.get("require_code_owner_reviews") is not True:
-            missing.append("require_code_owner_reviews")
 
     status = data.get("required_status_checks")
     contexts: set[str] = set()
@@ -59,9 +48,11 @@ def evaluate_protection(data: dict[str, Any], expected_check: str) -> dict[str, 
         missing.append("branch_deletions_must_be_disabled")
 
     return {
-        "verification_version": 1,
+        "verification_version": 2,
+        "operator_mode": "solo",
         "expected_status_check": expected_check,
         "observed_status_checks": sorted(contexts),
+        "human_pr_approval_required": False,
         "missing_or_invalid_controls": sorted(missing),
         "passed": not missing,
     }
@@ -116,7 +107,8 @@ def main() -> int:
         json.JSONDecodeError,
     ) as exc:
         report = {
-            "verification_version": 1,
+            "verification_version": 2,
+            "operator_mode": "solo",
             "repository": repository,
             "branch": branch,
             "passed": False,
