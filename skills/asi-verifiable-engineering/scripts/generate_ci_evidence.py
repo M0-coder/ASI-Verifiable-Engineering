@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a commit-bound ASI evidence manifest from measured gate results."""
+"""Generate a commit-bound ASI manifest from measured policy gate results."""
 
 from __future__ import annotations
 
@@ -14,11 +14,9 @@ from typing import Any
 
 from verify_change_budget import evaluate_budget, load_budget
 
-SHA256_PREFIX = "sha256:"
-
 
 def sha256_bytes(data: bytes) -> str:
-    return SHA256_PREFIX + hashlib.sha256(data).hexdigest()
+    return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
 def sha256_file(path: Path) -> str:
@@ -26,14 +24,13 @@ def sha256_file(path: Path) -> str:
 
 
 def git_bytes(root: Path, *args: str) -> bytes:
-    process = subprocess.run(
+    return subprocess.run(
         ["git", *args],
         cwd=root,
         check=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-    )
-    return process.stdout
+    ).stdout
 
 
 def required_gates(policy_text: str) -> set[str]:
@@ -56,7 +53,7 @@ def required_gates(policy_text: str) -> set[str]:
 
 
 def lockfile_digest(root: Path) -> str:
-    candidates = (
+    names = (
         "requirements-ci.lock",
         "requirements.lock",
         "package-lock.json",
@@ -69,7 +66,7 @@ def lockfile_digest(root: Path) -> str:
         "go.sum",
         "gradle.lockfile",
     )
-    found = [root / name for name in candidates if (root / name).is_file()]
+    found = [root / name for name in names if (root / name).is_file()]
     if not found:
         return sha256_bytes(b"NO_LOCKFILE:STANDARD_LIBRARY_ONLY")
     payload = b"".join(
@@ -79,15 +76,19 @@ def lockfile_digest(root: Path) -> str:
     return sha256_bytes(payload)
 
 
-def _safe_relative(path: Path, root: Path) -> str:
+def _relative(path: Path, root: Path) -> str:
     return str(path.resolve().relative_to(root.resolve()))
 
 
-def load_gate_results(output_dir: Path) -> dict[str, dict[str, Any]]:
+def load_gate_results(
+    output_dir: Path,
+    policy_path: Path,
+) -> dict[str, dict[str, Any]]:
     gates_dir = output_dir / "gates"
     if not gates_dir.is_dir():
         raise FileNotFoundError(f"Gate result directory does not exist: {gates_dir}")
 
+    policy_digest = sha256_file(policy_path)
     results: dict[str, dict[str, Any]] = {}
     for result_path in sorted(gates_dir.glob("*.json")):
         data = json.loads(result_path.read_text(encoding="utf-8"))
@@ -96,12 +97,20 @@ def load_gate_results(output_dir: Path) -> dict[str, dict[str, Any]]:
             raise ValueError(f"Gate result has no valid name: {result_path}")
         if name in results:
             raise ValueError(f"Duplicate gate result: {name}")
-        if data.get("result_version") != 1:
-            raise ValueError(f"Unsupported gate result version for {name}")
+        if data.get("result_version") != 2:
+            raise ValueError(f"Gate {name} must use result_version 2")
         if not isinstance(data.get("exit_code"), int):
-            raise ValueError(f"Gate {name} has no integer exit_code")
+            raise ValueError(f"Gate {name} has no measured exit_code")
         if not isinstance(data.get("argv"), list) or not data["argv"]:
             raise ValueError(f"Gate {name} has no measured argv")
+
+        policy = data.get("policy")
+        if not isinstance(policy, dict):
+            raise ValueError(f"Gate {name} is not bound to policy")
+        if policy.get("digest") != policy_digest:
+            raise ValueError(f"Gate {name} policy digest does not match")
+        if policy.get("command_key") != name:
+            raise ValueError(f"Gate {name} did not use its policy command key")
 
         log_artifact = data.get("log_artifact")
         if not isinstance(log_artifact, str) or not log_artifact:
@@ -109,35 +118,31 @@ def load_gate_results(output_dir: Path) -> dict[str, dict[str, Any]]:
         log_path = output_dir / log_artifact
         if not log_path.is_file():
             raise FileNotFoundError(f"Gate log does not exist: {log_path}")
-        measured_log_digest = sha256_file(log_path)
-        if data.get("log_digest") != measured_log_digest:
-            raise ValueError(f"Gate {name} log digest does not match its file")
+        if data.get("log_digest") != sha256_file(log_path):
+            raise ValueError(f"Gate {name} log digest does not match")
 
-        result_artifact = _safe_relative(result_path, output_dir)
-        data["result_artifact"] = result_artifact
+        data["result_artifact"] = _relative(result_path, output_dir)
         data["result_digest"] = sha256_file(result_path)
         results[name] = data
     return results
 
 
-def result_artifacts(
-    results: dict[str, dict[str, Any]],
-) -> list[dict[str, str]]:
-    artifacts: dict[str, dict[str, str]] = {}
+def _artifacts(results: dict[str, dict[str, Any]]) -> list[dict[str, str]]:
+    items: dict[str, dict[str, str]] = {}
     for result in results.values():
         result_path = str(result["result_artifact"])
         log_path = str(result["log_artifact"])
-        artifacts[result_path] = {
+        items[result_path] = {
             "path": result_path,
             "digest": str(result["result_digest"]),
             "producer": "github-actions/run_gate.py",
         }
-        artifacts[log_path] = {
+        items[log_path] = {
             "path": log_path,
             "digest": str(result["log_digest"]),
             "producer": "github-actions/run_gate.py",
         }
-    return [artifacts[path] for path in sorted(artifacts)]
+    return [items[path] for path in sorted(items)]
 
 
 def generate(args: argparse.Namespace) -> dict[str, Any]:
@@ -155,22 +160,14 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
         args.base_commit,
         args.evaluated_commit,
     )
-    budget_report_path = output_dir / "change-budget-report.json"
-    budget_report_path.write_text(
+    budget_path_out = output_dir / "change-budget-report.json"
+    budget_path_out.write_text(
         json.dumps(budget_report, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 
-    diff_bytes = git_bytes(
-        root,
-        "diff",
-        "--binary",
-        args.base_commit,
-        args.evaluated_commit,
-    )
-    results = load_gate_results(output_dir)
+    results = load_gate_results(output_dir, policy_path)
     required = required_gates(policy_text)
-
     gates: dict[str, str] = {}
     gate_evidence: dict[str, dict[str, Any]] = {}
     for name in sorted(required):
@@ -184,7 +181,7 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
         if result is None:
             gates[name] = "not_verified"
             gate_evidence[name] = {
-                "justification": f"No measured result exists for required gate {name}."
+                "justification": f"No measured result exists for {name}."
             }
             continue
         gates[name] = "passed" if result["exit_code"] == 0 else "failed"
@@ -195,26 +192,26 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
             "log_digest": result["log_digest"],
         }
 
-    commands: list[dict[str, Any]] = []
-    for name, result in sorted(results.items()):
-        commands.append(
-            {
-                "name": name,
-                "argv": result["argv"],
-                "command": result["command"],
-                "started_at": result["started_at"],
-                "finished_at": result["finished_at"],
-                "duration_seconds": result["duration_seconds"],
-                "exit_code": result["exit_code"],
-                "result_artifact": result["result_artifact"],
-                "result_digest": result["result_digest"],
-                "log_artifact": result["log_artifact"],
-                "log_digest": result["log_digest"],
-            }
-        )
+    commands = [
+        {
+            "name": name,
+            "argv": result["argv"],
+            "command": result["command"],
+            "started_at": result["started_at"],
+            "finished_at": result["finished_at"],
+            "duration_seconds": result["duration_seconds"],
+            "exit_code": result["exit_code"],
+            "result_artifact": result["result_artifact"],
+            "result_digest": result["result_digest"],
+            "log_artifact": result["log_artifact"],
+            "log_digest": result["log_digest"],
+        }
+        for name, result in sorted(results.items())
+    ]
 
-    honesty_result = results.get(args.test_honesty_gate)
-    if honesty_result is None:
+    honesty = results.get(args.test_honesty_gate)
+    test_honesty: dict[str, Any]
+    if honesty is None:
         test_honesty = {
             "method": "not_verified",
             "result_artifact": None,
@@ -225,16 +222,16 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
     else:
         test_honesty = {
             "method": "adversarial_control_tests",
-            "result_artifact": honesty_result["result_artifact"],
-            "result_digest": honesty_result["result_digest"],
-            "evidence": honesty_result["log_artifact"],
-            "digest": honesty_result["log_digest"],
+            "result_artifact": honesty["result_artifact"],
+            "result_digest": honesty["result_digest"],
+            "evidence": honesty["log_artifact"],
+            "digest": honesty["log_digest"],
         }
 
-    automated_required = required - {"independent_audit"}
-    all_automated_passed = all(gates.get(name) == "passed" for name in automated_required)
-    evidence_level = "E6" if all_automated_passed else "E5"
-    assurance_level = "T4" if all_automated_passed else "T3"
+    automated = required - {"independent_audit"}
+    automated_passed = all(gates.get(name) == "passed" for name in automated)
+    evidence_level = "E6" if automated_passed else "E5"
+    assurance_level = "T4" if automated_passed else "T3"
 
     unverified = set(args.unverified)
     for name, state in gates.items():
@@ -242,34 +239,37 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
             unverified.add(f"Required gate {name} is not verified.")
     if not budget_report["within_budget"]:
         unverified.add("Change budget is not satisfied.")
-    if honesty_result is None or honesty_result["exit_code"] != 0:
+    if honesty is None or honesty["exit_code"] != 0:
         unverified.add("Test-honesty control is not verified.")
 
     now = datetime.now(timezone.utc).replace(microsecond=0)
     expires = now + timedelta(days=args.validity_days)
-
     summary_path = output_dir / "ci-summary.json"
-    summary = {
-        "repository": args.repository,
-        "workflow_run": args.workflow_run,
-        "base_commit": args.base_commit,
-        "head_commit": args.head_commit,
-        "evaluated_commit": args.evaluated_commit,
-        "gates": gates,
-        "changed_files": budget_report["changed_files"],
-        "generated_at": now.isoformat().replace("+00:00", "Z"),
-    }
     summary_path.write_text(
-        json.dumps(summary, indent=2, sort_keys=True) + "\n",
+        json.dumps(
+            {
+                "repository": args.repository,
+                "workflow_run": args.workflow_run,
+                "base_commit": args.base_commit,
+                "head_commit": args.head_commit,
+                "evaluated_commit": args.evaluated_commit,
+                "gates": gates,
+                "changed_files": budget_report["changed_files"],
+                "generated_at": now.isoformat().replace("+00:00", "Z"),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
         encoding="utf-8",
     )
 
-    artifacts = result_artifacts(results)
+    artifacts = _artifacts(results)
     artifacts.extend(
         [
             {
                 "path": "change-budget-report.json",
-                "digest": sha256_file(budget_report_path),
+                "digest": sha256_file(budget_path_out),
                 "producer": "generate_ci_evidence.py",
             },
             {
@@ -291,7 +291,15 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
         "integrable_commit": args.evaluated_commit,
         "policy_version": 1,
         "policy_digest": sha256_file(policy_path),
-        "diff_digest": sha256_bytes(diff_bytes),
+        "diff_digest": sha256_bytes(
+            git_bytes(
+                root,
+                "diff",
+                "--binary",
+                args.base_commit,
+                args.evaluated_commit,
+            )
+        ),
         "doctrine_version": args.doctrine_version,
         "skill_version": args.skill_version,
         "risk": args.risk,
@@ -302,7 +310,7 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
             "os": args.os_name,
             "architecture": args.architecture,
             "runtime": args.runtime,
-            "package_manager": "stdlib",
+            "package_manager": "locked-pip",
             "lockfile_digest": lockfile_digest(root),
         },
         "changed_files": budget_report["changed_files"],
@@ -329,7 +337,7 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
         "unverified": sorted(unverified),
         "residual_risks": [
             "Independent targeted human review has not been completed.",
-            "The Skill has not been installed and exercised in the target environment.",
+            "The Skill has not been installed in the target environment.",
         ],
         "decision": "BLOCKED",
         "conditions": [],
@@ -342,7 +350,6 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
         "created_at": now.isoformat().replace("+00:00", "Z"),
         "expires_at": expires.isoformat().replace("+00:00", "Z"),
     }
-
     manifest_path = output_dir / "manifest.json"
     manifest_path.write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
@@ -385,7 +392,8 @@ def main() -> int:
     try:
         manifest = generate(args)
     except (OSError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as exc:
-        raise SystemExit(f"Cannot generate CI evidence: {exc}") from exc
+        print(f"Cannot generate CI evidence: {exc}")
+        return 2
     print(json.dumps(manifest, indent=2, sort_keys=True))
     return 0
 
