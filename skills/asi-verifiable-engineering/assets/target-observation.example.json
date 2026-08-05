@@ -1,0 +1,21 @@
+{
+  "observation_version": 1,
+  "repository": "owner/repository",
+  "head_commit": "1111111111111111111111111111111111111111",
+  "reviewer": "independent-reviewer",
+  "target_environment": "codex",
+  "package_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "result": "passed",
+  "executed_at": "2026-08-05T18:00:00Z",
+  "checks": [
+    "Loaded the Skill from the package whose digest is declared above.",
+    "Executed the read-only startup and baseline-identification protocol.",
+    "Executed a controlled blocked case and observed a BLOCKED decision.",
+    "Executed the documented invocation contract without modifying protected state.",
+    "Confirmed that the reported limitations match the observed target environment."
+  ],
+  "limitations": [
+    "This observation covers only the named target environment and exact package digest.",
+    "A new head, package digest, target environment, or expired observation requires new evidence."
+  ]
+}
