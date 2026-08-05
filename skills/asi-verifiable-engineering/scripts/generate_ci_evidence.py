@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a commit-bound ASI evidence manifest from a real CI execution."""
+"""Generate a commit-bound ASI evidence manifest from measured gate results."""
 
 from __future__ import annotations
 
@@ -12,18 +12,23 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from verify_change_budget import evaluate_budget, load_budget
+
+SHA256_PREFIX = "sha256:"
+
 
 def sha256_bytes(data: bytes) -> str:
-    return "sha256:" + hashlib.sha256(data).hexdigest()
+    return SHA256_PREFIX + hashlib.sha256(data).hexdigest()
 
 
 def sha256_file(path: Path) -> str:
     return sha256_bytes(path.read_bytes())
 
 
-def git_bytes(*args: str) -> bytes:
+def git_bytes(root: Path, *args: str) -> bytes:
     process = subprocess.run(
         ["git", *args],
+        cwd=root,
         check=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -31,30 +36,29 @@ def git_bytes(*args: str) -> bytes:
     return process.stdout
 
 
-def git_text(*args: str) -> str:
-    return git_bytes(*args).decode("utf-8")
-
-
-def policy_commands(text: str) -> dict[str, str]:
+def required_gates(policy_text: str) -> set[str]:
     match = re.search(
-        r"^commands:\s*$\n(?P<body>(?:^  .*(?:\n|$)|^\s*$)*)",
-        text,
+        r"^required_gates:\s*$\n(?P<body>(?:^  .*(?:\n|$)|^\s*$)*)",
+        policy_text,
         flags=re.MULTILINE,
     )
     if not match:
-        return {}
-    commands: dict[str, str] = {}
-    for name, raw_value in re.findall(
-        r"^  ([a-z][a-z0-9_]*):\s*(.+?)\s*$",
-        match.group("body"),
-        flags=re.MULTILINE,
-    ):
-        commands[name] = raw_value.strip().strip('"\'')
-    return commands
+        raise ValueError("Policy does not contain required_gates.")
+    return {
+        name
+        for name, state in re.findall(
+            r"^  ([a-z][a-z0-9_]*):\s*(true|false)\s*$",
+            match.group("body"),
+            flags=re.MULTILINE,
+        )
+        if state == "true"
+    }
 
 
 def lockfile_digest(root: Path) -> str:
     candidates = (
+        "requirements-ci.lock",
+        "requirements.lock",
         "package-lock.json",
         "pnpm-lock.yaml",
         "yarn.lock",
@@ -68,54 +72,178 @@ def lockfile_digest(root: Path) -> str:
     found = [root / name for name in candidates if (root / name).is_file()]
     if not found:
         return sha256_bytes(b"NO_LOCKFILE:STANDARD_LIBRARY_ONLY")
-    digest_input = b"".join(
+    payload = b"".join(
         path.name.encode("utf-8") + b"\0" + path.read_bytes()
         for path in sorted(found)
     )
-    return sha256_bytes(digest_input)
+    return sha256_bytes(payload)
 
 
-def load_budget(path: Path) -> dict[str, Any]:
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if data.get("version") != 1:
-        raise ValueError("Change budget version must equal 1.")
-    expected = data.get("expected_paths")
-    if not isinstance(expected, list) or not expected:
-        raise ValueError("Change budget expected_paths must be non-empty.")
-    return data
+def _safe_relative(path: Path, root: Path) -> str:
+    return str(path.resolve().relative_to(root.resolve()))
+
+
+def load_gate_results(output_dir: Path) -> dict[str, dict[str, Any]]:
+    gates_dir = output_dir / "gates"
+    if not gates_dir.is_dir():
+        raise FileNotFoundError(f"Gate result directory does not exist: {gates_dir}")
+
+    results: dict[str, dict[str, Any]] = {}
+    for result_path in sorted(gates_dir.glob("*.json")):
+        data = json.loads(result_path.read_text(encoding="utf-8"))
+        name = data.get("name")
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"Gate result has no valid name: {result_path}")
+        if name in results:
+            raise ValueError(f"Duplicate gate result: {name}")
+        if data.get("result_version") != 1:
+            raise ValueError(f"Unsupported gate result version for {name}")
+        if not isinstance(data.get("exit_code"), int):
+            raise ValueError(f"Gate {name} has no integer exit_code")
+        if not isinstance(data.get("argv"), list) or not data["argv"]:
+            raise ValueError(f"Gate {name} has no measured argv")
+
+        log_artifact = data.get("log_artifact")
+        if not isinstance(log_artifact, str) or not log_artifact:
+            raise ValueError(f"Gate {name} has no log_artifact")
+        log_path = output_dir / log_artifact
+        if not log_path.is_file():
+            raise FileNotFoundError(f"Gate log does not exist: {log_path}")
+        measured_log_digest = sha256_file(log_path)
+        if data.get("log_digest") != measured_log_digest:
+            raise ValueError(f"Gate {name} log digest does not match its file")
+
+        result_artifact = _safe_relative(result_path, output_dir)
+        data["result_artifact"] = result_artifact
+        data["result_digest"] = sha256_file(result_path)
+        results[name] = data
+    return results
+
+
+def result_artifacts(
+    results: dict[str, dict[str, Any]],
+) -> list[dict[str, str]]:
+    artifacts: dict[str, dict[str, str]] = {}
+    for result in results.values():
+        result_path = str(result["result_artifact"])
+        log_path = str(result["log_artifact"])
+        artifacts[result_path] = {
+            "path": result_path,
+            "digest": str(result["result_digest"]),
+            "producer": "github-actions/run_gate.py",
+        }
+        artifacts[log_path] = {
+            "path": log_path,
+            "digest": str(result["log_digest"]),
+            "producer": "github-actions/run_gate.py",
+        }
+    return [artifacts[path] for path in sorted(artifacts)]
 
 
 def generate(args: argparse.Namespace) -> dict[str, Any]:
-    root = Path.cwd()
-    policy_path = Path(args.policy)
-    budget_path = Path(args.budget)
-    output_dir = Path(args.output_dir)
+    root = Path(args.repo_root).resolve()
+    policy_path = (root / args.policy).resolve()
+    budget_path = (root / args.budget).resolve()
+    output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     policy_text = policy_path.read_text(encoding="utf-8")
     budget = load_budget(budget_path)
+    budget_report = evaluate_budget(
+        root,
+        budget,
+        args.base_commit,
+        args.evaluated_commit,
+    )
+    budget_report_path = output_dir / "change-budget-report.json"
+    budget_report_path.write_text(
+        json.dumps(budget_report, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
     diff_bytes = git_bytes(
+        root,
         "diff",
         "--binary",
         args.base_commit,
         args.evaluated_commit,
     )
-    changed_files = sorted(
-        line
-        for line in git_text(
-            "diff",
-            "--name-only",
-            args.base_commit,
-            args.evaluated_commit,
-        ).splitlines()
-        if line
-    )
+    results = load_gate_results(output_dir)
+    required = required_gates(policy_text)
 
-    expected_files = sorted(set(budget["expected_paths"]))
-    unexpected_files = sorted(set(changed_files) - set(expected_files))
-    missing_expected_files = sorted(set(expected_files) - set(changed_files))
-    within_budget = not unexpected_files
+    gates: dict[str, str] = {}
+    gate_evidence: dict[str, dict[str, Any]] = {}
+    for name in sorted(required):
+        if name == "independent_audit":
+            gates[name] = "not_verified"
+            gate_evidence[name] = {
+                "justification": "Independent targeted review has not been completed."
+            }
+            continue
+        result = results.get(name)
+        if result is None:
+            gates[name] = "not_verified"
+            gate_evidence[name] = {
+                "justification": f"No measured result exists for required gate {name}."
+            }
+            continue
+        gates[name] = "passed" if result["exit_code"] == 0 else "failed"
+        gate_evidence[name] = {
+            "result_artifact": result["result_artifact"],
+            "result_digest": result["result_digest"],
+            "log_artifact": result["log_artifact"],
+            "log_digest": result["log_digest"],
+        }
+
+    commands: list[dict[str, Any]] = []
+    for name, result in sorted(results.items()):
+        commands.append(
+            {
+                "name": name,
+                "argv": result["argv"],
+                "command": result["command"],
+                "started_at": result["started_at"],
+                "finished_at": result["finished_at"],
+                "duration_seconds": result["duration_seconds"],
+                "exit_code": result["exit_code"],
+                "result_artifact": result["result_artifact"],
+                "result_digest": result["result_digest"],
+                "log_artifact": result["log_artifact"],
+                "log_digest": result["log_digest"],
+            }
+        )
+
+    honesty_result = results.get(args.test_honesty_gate)
+    if honesty_result is None:
+        test_honesty = {
+            "method": "not_verified",
+            "result_artifact": None,
+            "result_digest": None,
+            "evidence": None,
+            "digest": None,
+        }
+    else:
+        test_honesty = {
+            "method": "adversarial_control_tests",
+            "result_artifact": honesty_result["result_artifact"],
+            "result_digest": honesty_result["result_digest"],
+            "evidence": honesty_result["log_artifact"],
+            "digest": honesty_result["log_digest"],
+        }
+
+    automated_required = required - {"independent_audit"}
+    all_automated_passed = all(gates.get(name) == "passed" for name in automated_required)
+    evidence_level = "E6" if all_automated_passed else "E5"
+    assurance_level = "T4" if all_automated_passed else "T3"
+
+    unverified = set(args.unverified)
+    for name, state in gates.items():
+        if state == "not_verified":
+            unverified.add(f"Required gate {name} is not verified.")
+    if not budget_report["within_budget"]:
+        unverified.add("Change budget is not satisfied.")
+    if honesty_result is None or honesty_result["exit_code"] != 0:
+        unverified.add("Test-honesty control is not verified.")
 
     now = datetime.now(timezone.utc).replace(microsecond=0)
     expires = now + timedelta(days=args.validity_days)
@@ -125,76 +253,50 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
         "repository": args.repository,
         "workflow_run": args.workflow_run,
         "base_commit": args.base_commit,
-        "evaluated_commit": args.evaluated_commit,
         "head_commit": args.head_commit,
-        "changed_files": changed_files,
-        "passed_gates": sorted(set(args.passed_gate)),
+        "evaluated_commit": args.evaluated_commit,
+        "gates": gates,
+        "changed_files": budget_report["changed_files"],
         "generated_at": now.isoformat().replace("+00:00", "Z"),
     }
     summary_path.write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    summary_digest = sha256_file(summary_path)
 
-    tests_log = Path(args.tests_log)
-    if not tests_log.is_file():
-        raise FileNotFoundError(f"Tests log does not exist: {tests_log}")
-    tests_digest = sha256_file(tests_log)
-
-    passed_gates = sorted(set(args.passed_gate))
-    gates = {name: "passed" for name in passed_gates}
-    gates["independent_audit"] = "not_verified"
-
-    gate_evidence = {
-        name: {
-            "artifact": summary_path.name,
-            "digest": summary_digest,
-        }
-        for name in passed_gates
-    }
-
-    commands = []
-    for name, command in sorted(policy_commands(policy_text).items()):
-        commands.append(
+    artifacts = result_artifacts(results)
+    artifacts.extend(
+        [
             {
-                "name": name,
-                "command": command,
-                "started_at": now.isoformat().replace("+00:00", "Z"),
-                "duration_seconds": 0.0,
-                "exit_code": 0,
-                "artifact": summary_path.name,
-                "artifact_digest": summary_digest,
-            }
-        )
+                "path": "change-budget-report.json",
+                "digest": sha256_file(budget_report_path),
+                "producer": "generate_ci_evidence.py",
+            },
+            {
+                "path": "ci-summary.json",
+                "digest": sha256_file(summary_path),
+                "producer": "generate_ci_evidence.py",
+            },
+        ]
+    )
 
-    unverified = list(args.unverified)
-    if not within_budget:
-        unverified.append("Change budget exceeded by unexpected files.")
-    unverified = sorted(set(unverified))
-
-    residual_risks = [
-        "Independent targeted human review has not been completed.",
-        "The Skill has not been installed and exercised in the target environment.",
-    ]
-
-    manifest = {
+    manifest: dict[str, Any] = {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "manifest_version": 1,
+        "manifest_version": 2,
         "repository": args.repository,
         "branch": args.branch,
         "base_commit": args.base_commit,
+        "head_commit": args.head_commit,
         "evaluated_commit": args.evaluated_commit,
         "integrable_commit": args.evaluated_commit,
-        "head_commit": args.head_commit,
         "policy_version": 1,
         "policy_digest": sha256_file(policy_path),
         "diff_digest": sha256_bytes(diff_bytes),
         "doctrine_version": args.doctrine_version,
         "skill_version": args.skill_version,
         "risk": args.risk,
-        "evidence_level": "E6",
-        "assurance_level": "T4",
+        "evidence_level": evidence_level,
+        "assurance_level": assurance_level,
         "independence": ["I2"],
         "environment": {
             "os": args.os_name,
@@ -203,22 +305,16 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
             "package_manager": "stdlib",
             "lockfile_digest": lockfile_digest(root),
         },
-        "changed_files": changed_files,
+        "changed_files": budget_report["changed_files"],
         "change_budget": {
-            "reference": str(budget_path),
-            "expected_files": expected_files,
-            "missing_expected_files": missing_expected_files,
-            "unexpected_files": unexpected_files,
-            "within_budget": within_budget,
+            "reference": str(budget_path.relative_to(root)),
+            **budget_report,
         },
         "commands": commands,
         "gates": gates,
         "gate_evidence": gate_evidence,
-        "test_honesty": {
-            "method": "independent_negative_test",
-            "evidence": tests_log.name,
-            "digest": tests_digest,
-        },
+        "test_honesty": test_honesty,
+        "forensic_triggers": budget_report["forensic_triggers"],
         "review": {
             "builder": args.builder,
             "auditor": None,
@@ -229,20 +325,12 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
                 "mode": "targeted",
             },
         },
-        "artifacts": [
-            {
-                "path": summary_path.name,
-                "digest": summary_digest,
-                "producer": "github-actions",
-            },
-            {
-                "path": tests_log.name,
-                "digest": tests_digest,
-                "producer": "github-actions",
-            },
+        "artifacts": artifacts,
+        "unverified": sorted(unverified),
+        "residual_risks": [
+            "Independent targeted human review has not been completed.",
+            "The Skill has not been installed and exercised in the target environment.",
         ],
-        "unverified": unverified,
-        "residual_risks": residual_risks,
         "decision": "BLOCKED",
         "conditions": [],
         "rollback": {
@@ -255,8 +343,8 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
         "expires_at": expires.isoformat().replace("+00:00", "Z"),
     }
 
-    output_path = output_dir / "manifest.json"
-    output_path.write_text(
+    manifest_path = output_dir / "manifest.json"
+    manifest_path.write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
@@ -273,13 +361,17 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--policy", required=True)
     result.add_argument("--budget", required=True)
     result.add_argument("--output-dir", required=True)
+    result.add_argument("--repo-root", default=".")
     result.add_argument("--builder", required=True)
     result.add_argument("--workflow-run", required=True)
-    result.add_argument("--risk", choices=("low", "medium", "high", "critical"), required=True)
+    result.add_argument(
+        "--risk",
+        choices=("low", "medium", "high", "critical"),
+        required=True,
+    )
     result.add_argument("--skill-version", required=True)
     result.add_argument("--doctrine-version", required=True)
-    result.add_argument("--tests-log", required=True)
-    result.add_argument("--passed-gate", action="append", default=[])
+    result.add_argument("--test-honesty-gate", default="test_honesty")
     result.add_argument("--unverified", action="append", default=[])
     result.add_argument("--os-name", default="ubuntu-24.04")
     result.add_argument("--architecture", default="x86_64")
@@ -290,7 +382,10 @@ def parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = parser().parse_args()
-    manifest = generate(args)
+    try:
+        manifest = generate(args)
+    except (OSError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as exc:
+        raise SystemExit(f"Cannot generate CI evidence: {exc}") from exc
     print(json.dumps(manifest, indent=2, sort_keys=True))
     return 0
 
