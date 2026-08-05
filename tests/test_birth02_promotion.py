@@ -85,11 +85,12 @@ class ReachableApprovalTests(unittest.TestCase):
         manifest = copy.deepcopy(source)
         policy = decision_engine.parse_policy(ROOT / ".asi" / "policy.yml")
         required = sorted(policy["required_gates"])
+        measured_controls = sorted(set(required) | {"test_honesty"})
 
         artifacts: list[dict[str, str]] = []
         commands: list[dict[str, object]] = []
-        gate_evidence: dict[str, dict[str, str]] = {}
-        for index, name in enumerate(required, start=1):
+        measured_evidence: dict[str, dict[str, str]] = {}
+        for index, name in enumerate(measured_controls, start=1):
             result_digest = "sha256:" + f"{index:064x}"[-64:]
             log_digest = "sha256:" + f"{index + 100:064x}"[-64:]
             result_path = f"gates/{name}.json"
@@ -123,7 +124,7 @@ class ReachableApprovalTests(unittest.TestCase):
                     "log_digest": log_digest,
                 }
             )
-            gate_evidence[name] = {
+            measured_evidence[name] = {
                 "result_artifact": result_path,
                 "result_digest": result_digest,
                 "log_artifact": log_path,
@@ -138,7 +139,9 @@ class ReachableApprovalTests(unittest.TestCase):
                 "independence": ["I2", "I3"],
                 "commands": commands,
                 "gates": {name: "passed" for name in required},
-                "gate_evidence": gate_evidence,
+                "gate_evidence": {
+                    name: measured_evidence[name] for name in required
+                },
                 "artifacts": artifacts,
                 "unverified": [],
                 "residual_risks": [],
@@ -161,15 +164,13 @@ class ReachableApprovalTests(unittest.TestCase):
                 },
             }
         )
-        honesty_command = next(
-            item for item in commands if item["name"] == "test_honesty"
-        )
+        honesty = measured_evidence["test_honesty"]
         manifest["test_honesty"] = {
             "method": "adversarial_control_tests",
-            "result_artifact": honesty_command["result_artifact"],
-            "result_digest": honesty_command["result_digest"],
-            "evidence": honesty_command["log_artifact"],
-            "digest": honesty_command["log_digest"],
+            "result_artifact": honesty["result_artifact"],
+            "result_digest": honesty["result_digest"],
+            "evidence": honesty["log_artifact"],
+            "digest": honesty["log_digest"],
         }
         return manifest
 
