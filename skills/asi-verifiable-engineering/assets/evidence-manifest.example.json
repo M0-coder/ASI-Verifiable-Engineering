@@ -153,7 +153,7 @@
     "reference": "Close the pull request.",
     "tested": false
   },
-  "skill_version": "0.1.0-draft.3",
+  "skill_version": "0.1.0-draft.2",
   "test_honesty": {
     "digest": null,
     "evidence": null,
