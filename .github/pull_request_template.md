@@ -11,10 +11,14 @@
 
 - **Commit base:**
 - **Commit evaluado:**
+- **Commit integrable:**
+- **Digest de política:**
+- **Digest del diff:**
 - **Versión de Skill:**
 - **Versión doctrinal:**
 - **Autor/constructor:**
 - **Auditor independiente:**
+- **Contextos separados:** sí | no
 
 ## Objetivo y criterios
 
@@ -26,6 +30,8 @@
 
 - Archivos previstos:
 - Archivos realmente modificados:
+- Archivos inesperados:
+- Dentro del presupuesto: sí | no
 - Interfaces afectadas:
 - Dependencias afectadas:
 - Condición de aborto:
@@ -37,14 +43,18 @@
 - **Nivel E relevante:**
 - **Nivel T requerido / alcanzado:**
 - **Independencia I requerida / utilizada:**
-- **Aprobación humana requerida:** sí | no
+- **Aprobación automática elegible:** sí | no
+- **Revisión línea por línea requerida:** no por defecto | excepcional
+- **Modo humano:** none | targeted | targeted_dual | exception_only
 
 ## TDD y honestidad de las pruebas
 
+- Método de honestidad:
 - Prueba que falló antes:
 - Causa correcta confirmada:
 - Prueba que pasó después:
 - Mutante, reversión temporal o prueba negativa:
+- Artefacto y digest:
 
 ## Puertas
 
@@ -56,7 +66,8 @@
 - [ ] Pruebas unitarias
 - [ ] Pruebas de integración
 - [ ] E2E/instrumentadas aplicables
-- [ ] Seguridad y secretos
+- [ ] Seguridad
+- [ ] Secretos
 - [ ] Dependencias y lockfiles
 - [ ] Reproducción en CI
 - [ ] Auditoría independiente
@@ -65,10 +76,20 @@
 ## Evidencia
 
 - Comandos y códigos de salida:
+- Estado de cada puerta:
+- Artefacto y digest por puerta:
 - Logs/reportes:
-- Artefactos y digests:
 - Workflow run:
 - Manifiesto de evidencia:
+- Resultado JSON del motor:
+
+## Decisión
+
+- **Decisión reclamada en el manifiesto:**
+- **Decisión derivada por `evaluate_change.py`:**
+- **Coinciden:** sí | no
+- **Bloqueadores derivados:**
+- **Acción humana requerida:**
 
 ## No verificado
 
@@ -86,6 +107,7 @@
 ## Declaración del constructor
 
 - [ ] No modifiqué ni debilité política, CI, protección, pruebas o umbrales para beneficiar este cambio.
-- [ ] Inspeccioné el diff completo.
+- [ ] Inspeccioné el diff como constructor, pero no presento esa lectura como evidencia de aprobación.
 - [ ] No afirmo haber ejecutado controles sin evidencia.
-- [ ] El cambio permanece sin merge hasta la revisión requerida.
+- [ ] No traté el campo `decision` del manifiesto como autoridad.
+- [ ] El cambio permanece sin merge hasta que la decisión derivada y la revisión exigida lo permitan.
