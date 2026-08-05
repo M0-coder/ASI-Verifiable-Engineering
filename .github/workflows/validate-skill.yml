@@ -85,6 +85,15 @@ jobs:
           --policy .asi/policy.yml
           --policy-key integrity
 
+      - name: Source rollback rehearsal gate
+        continue-on-error: true
+        run: >-
+          python skills/asi-verifiable-engineering/scripts/run_gate.py
+          --name rollback_check
+          --output-dir "$EVIDENCE_DIR"
+          --policy .asi/policy.yml
+          --policy-key rollback_check
+
       - name: Format gate
         continue-on-error: true
         run: >-
@@ -120,6 +129,15 @@ jobs:
           --output-dir "$EVIDENCE_DIR"
           --policy .asi/policy.yml
           --policy-key build
+
+      - name: Portable package installability gate
+        continue-on-error: true
+        run: >-
+          python skills/asi-verifiable-engineering/scripts/run_gate.py
+          --name package_installability
+          --output-dir "$EVIDENCE_DIR"
+          --policy .asi/policy.yml
+          --policy-key package_installability
 
       - name: Unit and regression gate
         continue-on-error: true
@@ -190,6 +208,14 @@ jobs:
             --unverified "Installation in the target agent environment is pending." \
             --unverified "Branch protection and required checks are not configured." \
             > "$EVIDENCE_DIR/generated-manifest-output.json"
+
+      - name: Finalize measured rollback and package evidence
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          python skills/asi-verifiable-engineering/scripts/finalize_measured_evidence.py \
+            "$EVIDENCE_DIR/manifest.json" \
+            2>&1 | tee "$EVIDENCE_DIR/finalization.log"
 
       - name: Recompute and validate evidence bindings
         continue-on-error: true
