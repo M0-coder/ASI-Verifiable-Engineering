@@ -23,6 +23,9 @@ jobs:
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONPYCACHEPREFIX: /tmp/asi-pycache
+      GITHUB_TOKEN: ${{ github.token }}
+      ASI_GITHUB_ADMIN_TOKEN: ${{ secrets.ASI_GITHUB_ADMIN_TOKEN }}
+      ASI_PROTECTED_BRANCH: main
 
     steps:
       - name: Check out exact integrable PR state
@@ -43,13 +46,22 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BRANCH: ${{ github.event.pull_request.head.ref }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
           evidence_dir="$RUNNER_TEMP/asi-evidence"
-          mkdir -p "$evidence_dir"
           evaluated_sha="$(git rev-parse HEAD)"
+          builder_context_id="$(python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('.asi/change-budget.json').read_text(encoding='utf-8'))
+          value = data.get('builder_context_id')
+          if not isinstance(value, str) or not value.strip():
+              raise SystemExit('builder_context_id is required in .asi/change-budget.json')
+          print(value)
+          PY
+          )"
+          mkdir -p "$evidence_dir"
           git merge-base --is-ancestor "$PR_BASE_SHA" "$evaluated_sha"
           git merge-base --is-ancestor "$PR_HEAD_SHA" "$evaluated_sha"
           printf 'EVIDENCE_DIR=%s\n' "$evidence_dir" >> "$GITHUB_ENV"
@@ -57,165 +69,45 @@ jobs:
           printf 'ASI_HEAD_SHA=%s\n' "$PR_HEAD_SHA" >> "$GITHUB_ENV"
           printf 'ASI_EVALUATED_SHA=%s\n' "$evaluated_sha" >> "$GITHUB_ENV"
           printf 'ASI_BRANCH=%s\n' "$PR_BRANCH" >> "$GITHUB_ENV"
-          printf 'ASI_BUILDER=%s\n' "$PR_AUTHOR" >> "$GITHUB_ENV"
+          printf 'ASI_BUILDER_CONTEXT_ID=%s\n' "$builder_context_id" >> "$GITHUB_ENV"
           printf 'ASI_REPOSITORY=%s\n' "$GITHUB_REPOSITORY" >> "$GITHUB_ENV"
           printf 'ASI_PR_NUMBER=%s\n' "$PR_NUMBER" >> "$GITHUB_ENV"
           printf 'base_commit=%s\n' "$PR_BASE_SHA"
           printf 'head_commit=%s\n' "$PR_HEAD_SHA"
           printf 'evaluated_commit=%s\n' "$evaluated_sha"
+          printf 'builder_context_id=%s\n' "$builder_context_id"
           python --version
           git status --short
 
-      - name: Install pinned CI toolchain
-        continue-on-error: true
-        run: >-
-          python skills/asi-verifiable-engineering/scripts/run_gate.py
-          --name install
-          --output-dir "$EVIDENCE_DIR"
-          --policy .asi/policy.yml
-          --policy-key install
-
-      - name: Integrity and change-budget gate
-        continue-on-error: true
-        run: >-
-          python skills/asi-verifiable-engineering/scripts/run_gate.py
-          --name integrity
-          --output-dir "$EVIDENCE_DIR"
-          --policy .asi/policy.yml
-          --policy-key integrity
-
-      - name: Effective main protection gate
-        continue-on-error: true
-        env:
-          ASI_GITHUB_ADMIN_TOKEN: ${{ secrets.ASI_GITHUB_ADMIN_TOKEN }}
-          ASI_PROTECTED_BRANCH: main
-        run: >-
-          python skills/asi-verifiable-engineering/scripts/run_gate.py
-          --name branch_protection
-          --output-dir "$EVIDENCE_DIR"
-          --policy .asi/policy.yml
-          --policy-key branch_protection
-
-      - name: Source rollback rehearsal gate
-        continue-on-error: true
-        run: >-
-          python skills/asi-verifiable-engineering/scripts/run_gate.py
-          --name rollback_check
-          --output-dir "$EVIDENCE_DIR"
-          --policy .asi/policy.yml
-          --policy-key rollback_check
-
-      - name: Format gate
-        continue-on-error: true
-        run: >-
-          python skills/asi-verifiable-engineering/scripts/run_gate.py
-          --name format_check
-          --output-dir "$EVIDENCE_DIR"
-          --policy .asi/policy.yml
-          --policy-key format_check
-
-      - name: Lint gate
-        continue-on-error: true
-        run: >-
-          python skills/asi-verifiable-engineering/scripts/run_gate.py
-          --name lint
-          --output-dir "$EVIDENCE_DIR"
-          --policy .asi/policy.yml
-          --policy-key lint
-
-      - name: Type-check gate
-        continue-on-error: true
-        run: >-
-          python skills/asi-verifiable-engineering/scripts/run_gate.py
-          --name typecheck
-          --output-dir "$EVIDENCE_DIR"
-          --policy .asi/policy.yml
-          --policy-key typecheck
-
-      - name: Build and package gate
-        continue-on-error: true
-        run: >-
-          python skills/asi-verifiable-engineering/scripts/run_gate.py
-          --name build
-          --output-dir "$EVIDENCE_DIR"
-          --policy .asi/policy.yml
-          --policy-key build
-
-      - name: Portable package installability gate
-        continue-on-error: true
-        run: >-
-          python skills/asi-verifiable-engineering/scripts/run_gate.py
-          --name package_installability
-          --output-dir "$EVIDENCE_DIR"
-          --policy .asi/policy.yml
-          --policy-key package_installability
-
-      - name: Unit and regression gate
-        continue-on-error: true
-        run: >-
-          python skills/asi-verifiable-engineering/scripts/run_gate.py
-          --name unit_tests
-          --output-dir "$EVIDENCE_DIR"
-          --policy .asi/policy.yml
-          --policy-key unit_tests
-
-      - name: Integration evidence gate
-        continue-on-error: true
-        run: >-
-          python skills/asi-verifiable-engineering/scripts/run_gate.py
-          --name integration_tests
-          --output-dir "$EVIDENCE_DIR"
-          --policy .asi/policy.yml
-          --policy-key integration_tests
-
-      - name: Dedicated secret-scan gate
-        continue-on-error: true
-        run: >-
-          python skills/asi-verifiable-engineering/scripts/run_gate.py
-          --name secret_scan
-          --output-dir "$EVIDENCE_DIR"
-          --policy .asi/policy.yml
-          --policy-key secret_scan
-
-      - name: Supply-chain and action-pin gate
-        continue-on-error: true
-        run: >-
-          python skills/asi-verifiable-engineering/scripts/run_gate.py
-          --name dependency_scan
-          --output-dir "$EVIDENCE_DIR"
-          --policy .asi/policy.yml
-          --policy-key dependency_scan
-
-      - name: Adversarial test-honesty control
-        continue-on-error: true
-        run: >-
-          python skills/asi-verifiable-engineering/scripts/run_gate.py
-          --name test_honesty
-          --output-dir "$EVIDENCE_DIR"
-          --policy .asi/policy.yml
-          --policy-key test_honesty
-
-      - name: Independent GitHub review attestation
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: >-
-          python skills/asi-verifiable-engineering/scripts/run_gate.py
-          --name independent_audit
-          --output-dir "$EVIDENCE_DIR"
-          --policy .asi/policy.yml
-          --policy-key independent_audit
-
-      - name: Target-environment observation attestation
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: >-
-          python skills/asi-verifiable-engineering/scripts/run_gate.py
-          --name target_environment_observation
-          --output-dir "$EVIDENCE_DIR"
-          --policy .asi/policy.yml
-          --policy-key target_environment_observation
+      - name: Execute measured policy gates
+        run: |
+          set +e
+          runner="skills/asi-verifiable-engineering/scripts/run_gate.py"
+          for gate in \
+            install \
+            integrity \
+            branch_protection \
+            rollback_check \
+            format_check \
+            lint \
+            typecheck \
+            build \
+            package_installability \
+            unit_tests \
+            integration_tests \
+            secret_scan \
+            dependency_scan \
+            test_honesty \
+            independent_audit \
+            target_environment_observation
+          do
+            python "$runner" \
+              --name "$gate" \
+              --output-dir "$EVIDENCE_DIR" \
+              --policy .asi/policy.yml \
+              --policy-key "$gate"
+          done
+          exit 0
 
       - name: Generate actual commit-bound evidence
         env:
@@ -232,7 +124,7 @@ jobs:
             --budget .asi/change-budget.json \
             --output-dir "$EVIDENCE_DIR" \
             --repo-root . \
-            --builder "$ASI_BUILDER" \
+            --builder "$ASI_BUILDER_CONTEXT_ID" \
             --workflow-run "$RUN_URL" \
             --risk high \
             --skill-version "$(cat VERSION)" \
@@ -247,7 +139,7 @@ jobs:
             "$EVIDENCE_DIR/manifest.json" \
             2>&1 | tee "$EVIDENCE_DIR/finalization.log"
 
-      - name: Apply review and target observation attestations
+      - name: Apply solo audit and target observation attestations
         continue-on-error: true
         run: |
           set -o pipefail
@@ -308,14 +200,15 @@ jobs:
 
           manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
           decision = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
-          approval_gates = {
+          external = {
+              "branch_protection",
               "independent_audit",
               "target_environment_observation",
           }
           technical_failures = sorted(
               name
               for name, state in manifest["gates"].items()
-              if name not in approval_gates and state != "passed"
+              if name not in external and state != "passed"
           )
           if technical_failures:
               raise SystemExit(
