@@ -171,12 +171,6 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
     gates: dict[str, str] = {}
     gate_evidence: dict[str, dict[str, Any]] = {}
     for name in sorted(required):
-        if name == "independent_audit":
-            gates[name] = "not_verified"
-            gate_evidence[name] = {
-                "justification": "Independent targeted review has not been completed."
-            }
-            continue
         result = results.get(name)
         if result is None:
             gates[name] = "not_verified"
@@ -228,10 +222,15 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
             "digest": honesty["log_digest"],
         }
 
-    automated = required - {"independent_audit"}
-    automated_passed = all(gates.get(name) == "passed" for name in automated)
-    evidence_level = "E6" if automated_passed else "E5"
-    assurance_level = "T4" if automated_passed else "T3"
+    preoperational = required - {
+        "independent_audit",
+        "target_environment_observation",
+    }
+    preoperational_passed = all(
+        gates.get(name) == "passed" for name in preoperational
+    )
+    evidence_level = "E6" if preoperational_passed else "E5"
+    assurance_level = "T4" if preoperational_passed else "T3"
 
     unverified = set(args.unverified)
     for name, state in gates.items():
@@ -241,6 +240,16 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
         unverified.add("Change budget is not satisfied.")
     if honesty is None or honesty["exit_code"] != 0:
         unverified.add("Test-honesty control is not verified.")
+
+    residual_risks: list[str] = []
+    if gates.get("independent_audit") != "passed":
+        residual_risks.append(
+            "Independent targeted human review has not been completed."
+        )
+    if gates.get("target_environment_observation") != "passed":
+        residual_risks.append(
+            "The Skill has not been observed in the target environment."
+        )
 
     now = datetime.now(timezone.utc).replace(microsecond=0)
     expires = now + timedelta(days=args.validity_days)
@@ -335,10 +344,7 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
         },
         "artifacts": artifacts,
         "unverified": sorted(unverified),
-        "residual_risks": [
-            "Independent targeted human review has not been completed.",
-            "The Skill has not been installed in the target environment.",
-        ],
+        "residual_risks": residual_risks,
         "decision": "BLOCKED",
         "conditions": [],
         "rollback": {
