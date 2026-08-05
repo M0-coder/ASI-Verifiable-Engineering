@@ -1,0 +1,104 @@
+version: 1
+
+doctrine:
+  name: ASI Verifiable Engineering
+  version: "1.2"
+  skill_version: "0.1.0-draft.1"
+  source: "skills/asi-verifiable-engineering/SKILL.md"
+
+repository:
+  default_risk: high
+  policy_owner: "Eidon"
+  protected_branches:
+    - main
+  protected_paths:
+    - ".asi/**"
+    - ".github/**"
+    - "skills/asi-verifiable-engineering/SKILL.md"
+    - "skills/asi-verifiable-engineering/references/**"
+    - "skills/asi-verifiable-engineering/scripts/**"
+    - "tools/**"
+
+commands:
+  install: "python --version"
+  format_check: "python tools/validate_skill_package.py skills/asi-verifiable-engineering"
+  lint: "python tools/validate_skill_package.py skills/asi-verifiable-engineering"
+  typecheck: "python -m compileall tools tests skills/asi-verifiable-engineering/scripts"
+  build: "python tools/validate_skill_package.py skills/asi-verifiable-engineering"
+  unit_tests: "python -m unittest discover -s tests -v"
+  integration_tests: "python skills/asi-verifiable-engineering/scripts/validate_policy.py .asi/policy.yml && python skills/asi-verifiable-engineering/scripts/validate_evidence.py skills/asi-verifiable-engineering/assets/evidence-manifest.example.json"
+  security_scan: "python tools/validate_skill_package.py skills/asi-verifiable-engineering"
+
+required_gates:
+  format_check: true
+  lint: true
+  typecheck: true
+  build: true
+  unit_tests: true
+  integration_tests: true
+  secret_scan: true
+  dependency_scan: true
+  independent_audit: true
+
+risk_escalation:
+  high:
+    - ".asi/**"
+    - ".github/**"
+    - "skills/asi-verifiable-engineering/SKILL.md"
+    - "skills/asi-verifiable-engineering/references/**"
+    - "skills/asi-verifiable-engineering/scripts/**"
+    - "tools/**"
+  critical:
+    - ".github/workflows/release-skill.yml"
+    - "production-access/**"
+    - "destructive-operations/**"
+
+assurance:
+  low:
+    minimum_t: T4
+    independence:
+      - I1
+      - I2
+  medium:
+    minimum_t: T4
+    independence:
+      - I1
+      - I2
+  high:
+    minimum_t: T5
+    independence:
+      - I2
+      - I3
+  critical:
+    minimum_t: T6
+    independence:
+      - I2
+      - I3
+    dual_human_approval: true
+
+evidence:
+  directory: ".asi/evidence"
+  retention_days: 90
+  require_commit_sha: true
+  require_exit_codes: true
+  require_artifact_digests: true
+
+deployment:
+  build_once_promote_same_artifact: true
+  require_rollback: true
+  require_canary_for_high_risk: true
+  autonomous_production_changes: false
+
+agent_permissions:
+  direct_push_protected_branch: false
+  self_approve: false
+  modify_policy_in_same_change: false
+  disable_required_gate: false
+  access_production_secrets: false
+  irreversible_action_without_human: false
+
+exceptions:
+  allow_permanent: false
+  require_owner: true
+  require_expiry: true
+  require_compensating_controls: true
