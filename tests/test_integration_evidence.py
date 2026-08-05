@@ -56,8 +56,8 @@ class EvidenceIntegrationTests(unittest.TestCase):
             policy = repo / "policy.yml"
             policy.write_text(
                 "commands:\n"
-                "  unit_tests: \"python -c print('unit-ok')\"\n"
-                "  test_honesty: \"python -c print('negative-ok')\"\n"
+                "  unit_tests: \"python --version\"\n"
+                "  test_honesty: \"python --version\"\n"
                 "required_gates:\n"
                 "  unit_tests: true\n"
                 "  independent_audit: true\n",
