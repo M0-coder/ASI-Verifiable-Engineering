@@ -14,6 +14,7 @@
     "README.md",
     "SECURITY.md",
     "VERSION",
+    "mypy.ini",
     "requirements-ci.lock",
     "skills/asi-verifiable-engineering/SKILL.md",
     "skills/asi-verifiable-engineering/assets/audit-report.md",
@@ -26,6 +27,7 @@
     "skills/asi-verifiable-engineering/references/annex-d-policy-as-code.md",
     "skills/asi-verifiable-engineering/references/annex-e-automated-acceptance.md",
     "skills/asi-verifiable-engineering/references/core-doctrine.md",
+    "skills/asi-verifiable-engineering/scripts/check_format.py",
     "skills/asi-verifiable-engineering/scripts/evaluate_change.py",
     "skills/asi-verifiable-engineering/scripts/generate_ci_evidence.py",
     "skills/asi-verifiable-engineering/scripts/run_gate.py",
@@ -46,7 +48,7 @@
     "keys/**",
     "secrets/**"
   ],
-  "max_files": 40,
+  "max_files": 42,
   "max_changed_lines": 8000,
   "allow_binary_files": false,
   "stop_conditions": [
