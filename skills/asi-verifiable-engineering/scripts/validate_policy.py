@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the strict ASI policy contract without third-party dependencies."""
+"""Validate the strict ASI solo-operator policy contract."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from pathlib import Path
 
 REQUIRED_SECTIONS = {
     "doctrine",
+    "governance",
     "repository",
     "commands",
     "required_gates",
@@ -60,6 +61,8 @@ REQUIRED_GATES = {
 FALSE_AGENT_PERMISSIONS = {
     "direct_push_protected_branch",
     "self_approve",
+    "forge_audit_attestation",
+    "claim_owner_authorization",
     "modify_policy_in_same_change",
     "disable_required_gate",
     "access_production_secrets",
@@ -152,8 +155,8 @@ def _validate_assurance(section: str, errors: list[str]) -> None:
     expected_i = {
         "low": {"I1", "I2"},
         "medium": {"I1", "I2"},
-        "high": {"I2", "I3"},
-        "critical": {"I2", "I3"},
+        "high": {"I1", "I2"},
+        "critical": {"I1", "I2", "I3"},
     }
     for level, minimum_t in expected_t.items():
         match = re.search(
@@ -178,11 +181,10 @@ def _validate_assurance(section: str, errors: list[str]) -> None:
                 flags=re.MULTILINE,
             )
         )
-        missing = sorted(expected_i[level] - actual_i)
-        if missing:
+        if actual_i != expected_i[level]:
             errors.append(
-                f"assurance.{level}.independence is missing: "
-                + ", ".join(missing)
+                f"assurance.{level}.independence must be exactly: "
+                + ", ".join(sorted(expected_i[level]))
             )
 
 
@@ -202,6 +204,22 @@ def validate_policy(path: Path) -> list[str]:
     missing_sections = sorted(REQUIRED_SECTIONS - _top_level_sections(text))
     if missing_sections:
         errors.append("Missing top-level sections: " + ", ".join(missing_sections))
+
+    governance = _section(text, "governance")
+    if not re.search(r"^  operator_mode:\s*solo\s*$", governance, flags=re.MULTILINE):
+        errors.append("governance.operator_mode must be solo.")
+    if not re.search(
+        r"^  high_risk_authorization:\s*owner_merge\s*$",
+        governance,
+        flags=re.MULTILINE,
+    ):
+        errors.append("governance.high_risk_authorization must be owner_merge.")
+    if not re.search(
+        r"^  critical_risk_authorization:\s*dual_human\s*$",
+        governance,
+        flags=re.MULTILINE,
+    ):
+        errors.append("governance.critical_risk_authorization must be dual_human.")
 
     repository = _section(text, "repository")
     if not re.search(
@@ -233,6 +251,8 @@ def validate_policy(path: Path) -> list[str]:
         )
         if match is None or not match.group(1).strip():
             errors.append(f"commands.{key} must be non-empty.")
+    if "--require-audit" not in commands:
+        errors.append("commands.independent_audit must use --require-audit.")
 
     gates = _section(text, "required_gates")
     missing_gates = sorted(REQUIRED_GATES - _mapping_keys(gates))
@@ -276,13 +296,7 @@ def validate_policy(path: Path) -> list[str]:
         errors.append("automated_acceptance.eligible_risks must be exactly low and medium.")
 
     evidence = _section(text, "evidence")
-    _require_booleans(
-        evidence,
-        TRUE_EVIDENCE_RULES,
-        "true",
-        "evidence",
-        errors,
-    )
+    _require_booleans(evidence, TRUE_EVIDENCE_RULES, "true", "evidence", errors)
 
     permissions = _section(text, "agent_permissions")
     _require_booleans(
