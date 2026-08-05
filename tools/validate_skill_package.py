@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+"""Validate an Agent Skills package and ASI repository invariants."""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from pathlib import Path
+
+NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+SECRET_PATTERNS = {
+    "GitHub classic token": re.compile(r"ghp_[A-Za-z0-9]{30,}"),
+    "GitHub fine-grained token": re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),
+    "OpenAI-style key": re.compile(r"sk-[A-Za-z0-9]{20,}"),
+    "AWS access key": re.compile(r"AKIA[0-9A-Z]{16}"),
+    "Private key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+}
+
+REQUIRED_PACKAGE_FILES = {
+    "SKILL.md",
+    "references/core-doctrine.md",
+    "references/annex-a-ai-code.md",
+    "references/annex-b-assurance.md",
+    "references/annex-c-control-matrix.md",
+    "references/annex-d-policy-as-code.md",
+    "assets/policy.example.yml",
+    "assets/audit-report.md",
+    "assets/change-budget.md",
+    "assets/evidence-manifest.example.json",
+    "scripts/validate_policy.py",
+    "scripts/validate_evidence.py",
+}
+
+
+def parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
+    if not text.startswith("---\n"):
+        raise ValueError("SKILL.md must begin with YAML frontmatter delimited by ---.")
+    closing = text.find("\n---\n", 4)
+    if closing == -1:
+        raise ValueError("SKILL.md frontmatter is not closed with ---.")
+
+    raw = text[4:closing]
+    body = text[closing + 5 :]
+    fields: dict[str, str] = {}
+    current_parent: str | None = None
+
+    for line in raw.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if line.startswith("  ") and current_parent:
+            key, separator, value = line.strip().partition(":")
+            if separator:
+                fields[f"{current_parent}.{key}"] = value.strip().strip('"\'')
+            continue
+        key, separator, value = line.partition(":")
+        if not separator:
+            raise ValueError(f"Invalid frontmatter line: {line!r}")
+        key = key.strip()
+        value = value.strip().strip('"\'')
+        if value:
+            fields[key] = value
+            current_parent = None
+        else:
+            current_parent = key
+
+    return fields, body
+
+
+def repository_root(skill_dir: Path) -> Path:
+    current = skill_dir.resolve()
+    for candidate in (current, *current.parents):
+        if (candidate / "VERSION").is_file() and (candidate / ".github").exists():
+            return candidate
+    raise ValueError("Could not locate repository root from skill directory.")
+
+
+def validate_package(skill_dir: Path) -> list[str]:
+    errors: list[str] = []
+    skill_dir = skill_dir.resolve()
+    skill_file = skill_dir / "SKILL.md"
+
+    if not skill_file.is_file():
+        return [f"Missing required file: {skill_file}"]
+
+    text = skill_file.read_text(encoding="utf-8")
+    try:
+        fields, body = parse_frontmatter(text)
+    except ValueError as exc:
+        return [str(exc)]
+
+    name = fields.get("name", "")
+    description = fields.get("description", "")
+
+    if not name:
+        errors.append("Frontmatter field `name` is required.")
+    elif len(name) > 64:
+        errors.append("Frontmatter `name` exceeds 64 characters.")
+    elif not NAME_RE.fullmatch(name):
+        errors.append("Frontmatter `name` must contain lowercase letters, numbers, and single hyphens only.")
+    elif name != skill_dir.name:
+        errors.append(f"Frontmatter name {name!r} must match directory {skill_dir.name!r}.")
+
+    if not description:
+        errors.append("Frontmatter field `description` is required.")
+    elif len(description) > 1024:
+        errors.append("Frontmatter `description` exceeds 1024 characters.")
+    elif "use" not in description.lower() and "ús" not in description.lower():
+        errors.append("Description should state when to use the skill.")
+
+    compatibility = fields.get("compatibility")
+    if compatibility and len(compatibility) > 500:
+        errors.append("Frontmatter `compatibility` exceeds 500 characters.")
+
+    line_count = len(text.splitlines())
+    if line_count > 500:
+        errors.append(f"SKILL.md has {line_count} lines; keep it at or below 500.")
+
+    missing_files = sorted(path for path in REQUIRED_PACKAGE_FILES if not (skill_dir / path).is_file())
+    if missing_files:
+        errors.append("Missing package files: " + ", ".join(missing_files))
+
+    for target in LINK_RE.findall(body):
+        if target.startswith(("http://", "https://", "#", "mailto:")):
+            continue
+        clean = target.split("#", 1)[0]
+        if not clean:
+            continue
+        if clean.count("/") > 1:
+            errors.append(f"Reference is nested too deeply for progressive disclosure: {target}")
+        if not (skill_dir / clean).exists():
+            errors.append(f"Broken local reference in SKILL.md: {target}")
+
+    try:
+        root = repository_root(skill_dir)
+    except ValueError as exc:
+        errors.append(str(exc))
+        root = None
+
+    if root:
+        version = (root / "VERSION").read_text(encoding="utf-8").strip()
+        metadata_version = fields.get("metadata.version")
+        if metadata_version != version:
+            errors.append(
+                f"metadata.version {metadata_version!r} does not match VERSION {version!r}."
+            )
+
+        for path in root.rglob("*"):
+            if not path.is_file() or ".git" in path.parts:
+                continue
+            try:
+                content = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            if any(line.rstrip("\n\r") != line.rstrip("\n\r ") for line in content.splitlines(True)):
+                errors.append(f"Trailing whitespace detected: {path.relative_to(root)}")
+            for label, pattern in SECRET_PATTERNS.items():
+                if pattern.search(content):
+                    errors.append(f"Potential {label} detected in {path.relative_to(root)}")
+
+    return errors
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("skill_dir", type=Path)
+    args = parser.parse_args(argv)
+
+    errors = validate_package(args.skill_dir)
+    if errors:
+        print("ASI Skill validation failed:", file=sys.stderr)
+        for error in errors:
+            print(f"- {error}", file=sys.stderr)
+        return 1
+
+    print(f"ASI Skill package is valid: {args.skill_dir}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
