@@ -6,6 +6,11 @@ doctrine:
   skill_version: "0.1.0-draft.2"
   source: "skills/asi-verifiable-engineering/SKILL.md"
 
+governance:
+  operator_mode: solo
+  high_risk_authorization: owner_merge
+  critical_risk_authorization: dual_human
+
 repository:
   default_risk: medium
   policy_owner: "REPLACE_WITH_OWNER"
@@ -14,8 +19,6 @@ repository:
   protected_paths:
     - ".asi/**"
     - ".github/**"
-    - "mypy.ini"
-    - "requirements-ci.lock"
     - "auth/**"
     - "payments/**"
     - "migrations/**"
@@ -24,7 +27,7 @@ repository:
 commands:
   install: "REPLACE_WITH_PINNED_INSTALL_COMMAND"
   integrity: "REPLACE_WITH_CHANGE_BUDGET_COMMAND"
-  branch_protection: "REPLACE_WITH_BRANCH_PROTECTION_API_CHECK"
+  branch_protection: "REPLACE_WITH_BRANCH_PROTECTION_CHECK"
   format_check: "REPLACE_WITH_FORMAT_CHECK_COMMAND"
   lint: "REPLACE_WITH_LINT_COMMAND"
   typecheck: "REPLACE_WITH_STRICT_TYPECHECK_COMMAND"
@@ -36,8 +39,8 @@ commands:
   dependency_scan: "REPLACE_WITH_SUPPLY_CHAIN_SCAN_COMMAND"
   test_honesty: "REPLACE_WITH_ADVERSARIAL_TEST_COMMAND"
   rollback_check: "REPLACE_WITH_ROLLBACK_REHEARSAL_COMMAND"
-  independent_audit: "REPLACE_WITH_INDEPENDENT_REVIEW_ATTESTATION_COMMAND"
-  target_environment_observation: "REPLACE_WITH_TARGET_OBSERVATION_ATTESTATION_COMMAND"
+  independent_audit: "python path/to/collect_audit.py --require-audit"
+  target_environment_observation: "python path/to/collect_audit.py --require-observation"
 
 required_gates:
   integrity: true
@@ -82,11 +85,12 @@ assurance:
   high:
     minimum_t: T5
     independence:
+      - I1
       - I2
-      - I3
   critical:
     minimum_t: T6
     independence:
+      - I1
       - I2
       - I3
     dual_human_approval: true
@@ -125,6 +129,8 @@ deployment:
 agent_permissions:
   direct_push_protected_branch: false
   self_approve: false
+  forge_audit_attestation: false
+  claim_owner_authorization: false
   modify_policy_in_same_change: false
   disable_required_gate: false
   access_production_secrets: false
