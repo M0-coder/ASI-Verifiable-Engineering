@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply verified review and target-observation attestations to a manifest."""
+"""Apply verified solo-operator audit and target-observation attestations."""
 
 from __future__ import annotations
 
@@ -8,7 +8,8 @@ import sys
 from pathlib import Path
 from typing import Any, cast
 
-PENDING_REVIEW_ITEMS = {
+PENDING_AUDIT_ITEMS = {
+    "Independent separate-context AI audit is pending.",
     "Independent targeted human review is pending.",
     "Required gate independent_audit is not verified.",
 }
@@ -16,11 +17,12 @@ PENDING_OBSERVATION_ITEMS = {
     "Installation in the target agent environment is pending.",
     "Required gate target_environment_observation is not verified.",
 }
-PENDING_REVIEW_RISKS = {
+PENDING_AUDIT_RISKS = {
+    "Independent separate-context AI audit has not been completed.",
     "Independent targeted human review has not been completed.",
 }
 PENDING_OBSERVATION_RISKS = {
-    "The Skill has not been installed in the target environment.",
+    "The Skill has not been observed in the target environment.",
 }
 
 
@@ -57,43 +59,61 @@ def _gate_evidence(manifest: dict[str, Any], name: str) -> dict[str, Any]:
 
 
 def _remove_strings(value: Any, removed: set[str]) -> list[str]:
-    return sorted(
-        item
-        for item in value if isinstance(item, str) and item not in removed
-    ) if isinstance(value, list) else []
+    return (
+        sorted(
+            item
+            for item in value
+            if isinstance(item, str) and item not in removed
+        )
+        if isinstance(value, list)
+        else []
+    )
 
 
 def apply_attestations(
     manifest: dict[str, Any],
-    review_report: dict[str, Any],
+    audit_report: dict[str, Any],
     observation_report: dict[str, Any],
 ) -> dict[str, Any]:
-    if review_report.get("passed") is not True:
+    if audit_report.get("passed") is not True:
         return manifest
-    approvals = review_report.get("approvals")
-    if not isinstance(approvals, list) or not approvals:
-        raise ValueError("Passed review report contains no approvals.")
-    if review_report.get("head_commit") != manifest.get("head_commit"):
-        raise ValueError("Review report is not bound to the manifest head commit.")
+    audits = audit_report.get("audits")
+    if not isinstance(audits, list) or not audits:
+        raise ValueError("Passed audit report contains no audit attestations.")
+    if audit_report.get("head_commit") != manifest.get("head_commit"):
+        raise ValueError("Audit report is not bound to the manifest head commit.")
 
     review = manifest.get("review")
     if not isinstance(review, dict):
         raise ValueError("Manifest review object is missing.")
-    if review_report.get("builder") != review.get("builder"):
-        raise ValueError("Review report builder does not match the manifest builder.")
+    builder_context_id = review.get("builder")
+    if audit_report.get("builder_context_id") != builder_context_id:
+        raise ValueError("Audit report builder context does not match the manifest.")
 
-    reviewers: list[str] = []
-    for approval in approvals:
-        if not isinstance(approval, dict):
-            raise ValueError("Approval entry must be an object.")
-        reviewer = approval.get("reviewer")
-        if not isinstance(reviewer, str) or not reviewer:
-            raise ValueError("Approval reviewer is missing.")
-        if reviewer == review.get("builder"):
-            raise ValueError("Builder cannot be the independent reviewer.")
-        if approval.get("commit_id") != manifest.get("head_commit"):
-            raise ValueError("Approval is stale for the manifest head commit.")
-        reviewers.append(reviewer)
+    accepted_audit: dict[str, Any] | None = None
+    for item in audits:
+        if not isinstance(item, dict):
+            continue
+        auditor_context_id = item.get("auditor_context_id")
+        if not isinstance(auditor_context_id, str) or not auditor_context_id:
+            continue
+        if auditor_context_id == builder_context_id:
+            continue
+        if item.get("head_commit") != manifest.get("head_commit"):
+            continue
+        audit = item.get("audit")
+        if not isinstance(audit, dict):
+            continue
+        if audit.get("mode") != "read_only" or audit.get("result") != "passed":
+            continue
+        if audit.get("write_actions") != []:
+            continue
+        accepted_audit = cast(dict[str, Any], item)
+        break
+    if accepted_audit is None:
+        raise ValueError(
+            "No audit attestation proves a distinct read-only AI context."
+        )
 
     gates = manifest.get("gates")
     gate_evidence = manifest.get("gate_evidence")
@@ -106,30 +126,34 @@ def apply_attestations(
         "independent_audit",
     )
 
-    primary = reviewers[0]
-    review["auditor"] = primary
-    review["reviewers"] = sorted(set(reviewers))
+    auditor_context_id = cast(str, accepted_audit["auditor_context_id"])
+    review["auditor"] = auditor_context_id
+    review["auditor_actor"] = accepted_audit.get("actor")
     review["same_context"] = False
-    review["human_review"] = {
+    review["audit_review"] = {
         "required": True,
         "completed": True,
-        "mode": "targeted",
-        "source": "github_pull_request_reviews_api",
+        "mode": "separate_ai_read_only",
+        "source": "github_review_comment_and_external_evidence",
     }
-    review["attestation"] = review_report
+    review["human_review"] = {
+        "required": True,
+        "completed": False,
+        "mode": "owner_merge",
+    }
+    review["attestation"] = accepted_audit
 
     independence = manifest.get("independence")
     if not isinstance(independence, list):
         raise ValueError("Manifest independence list is missing.")
-    manifest["independence"] = sorted(set([*independence, "I3"]))
-    manifest["approved_by"] = sorted(set(reviewers))
+    manifest["independence"] = sorted(set([*independence, "I1"]))
     manifest["unverified"] = _remove_strings(
         manifest.get("unverified"),
-        PENDING_REVIEW_ITEMS,
+        PENDING_AUDIT_ITEMS,
     )
     manifest["residual_risks"] = _remove_strings(
         manifest.get("residual_risks"),
-        PENDING_REVIEW_RISKS,
+        PENDING_AUDIT_RISKS,
     )
 
     if observation_report.get("observation_passed") is not True:
@@ -148,7 +172,7 @@ def apply_attestations(
     for item in observations:
         if not isinstance(item, dict):
             continue
-        if item.get("reviewer") not in reviewers:
+        if item.get("auditor_context_id") != auditor_context_id:
             continue
         if item.get("head_commit") != manifest.get("head_commit"):
             continue
@@ -160,7 +184,7 @@ def apply_attestations(
         break
     if accepted_observation is None:
         raise ValueError(
-            "No target observation matches the approved reviewer, head, and package digest."
+            "No target observation matches the audit context, head, and package digest."
         )
     if gates.get("target_environment_observation") != "passed":
         raise ValueError("target_environment_observation gate is not passed.")
@@ -187,25 +211,25 @@ def apply_attestations(
 def main() -> int:
     if len(sys.argv) != 4:
         print(
-            "Usage: apply_review_attestation.py MANIFEST REVIEW_REPORT OBSERVATION_REPORT",
+            "Usage: apply_review_attestation.py MANIFEST AUDIT_REPORT OBSERVATION_REPORT",
             file=sys.stderr,
         )
         return 2
     manifest_path = Path(sys.argv[1])
-    review_path = Path(sys.argv[2])
+    audit_path = Path(sys.argv[2])
     observation_path = Path(sys.argv[3])
     try:
         manifest_raw = json.loads(manifest_path.read_text(encoding="utf-8"))
-        review_raw = json.loads(review_path.read_text(encoding="utf-8"))
+        audit_raw = json.loads(audit_path.read_text(encoding="utf-8"))
         observation_raw = json.loads(observation_path.read_text(encoding="utf-8"))
         if not all(
             isinstance(item, dict)
-            for item in (manifest_raw, review_raw, observation_raw)
+            for item in (manifest_raw, audit_raw, observation_raw)
         ):
             raise ValueError("Manifest and attestation roots must be objects.")
         manifest = apply_attestations(
             cast(dict[str, Any], manifest_raw),
-            cast(dict[str, Any], review_raw),
+            cast(dict[str, Any], audit_raw),
             cast(dict[str, Any], observation_raw),
         )
         temporary = manifest_path.with_suffix(manifest_path.suffix + ".tmp")
