@@ -2,12 +2,17 @@ name: Validate ASI Skill
 
 on:
   pull_request:
+  pull_request_review:
+    types:
+      - submitted
+      - dismissed
   push:
     branches:
       - main
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: validate-skill-${{ github.ref }}
@@ -28,6 +33,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -41,29 +47,36 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BRANCH: ${{ github.event.pull_request.head.ref }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           PUSH_BASE_SHA: ${{ github.event.before }}
         run: |
           set -euo pipefail
           evidence_dir="$RUNNER_TEMP/asi-evidence"
           mkdir -p "$evidence_dir"
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+          evaluated_sha="$(git rev-parse HEAD)"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] || \
+             [ "$GITHUB_EVENT_NAME" = "pull_request_review" ]; then
             base_sha="$PR_BASE_SHA"
             head_sha="$PR_HEAD_SHA"
             branch="$PR_BRANCH"
             builder="$PR_AUTHOR"
+            pull_request="$PR_NUMBER"
           else
             base_sha="$PUSH_BASE_SHA"
             head_sha="$GITHUB_SHA"
             branch="$GITHUB_REF_NAME"
             builder="$GITHUB_ACTOR"
+            pull_request="0"
           fi
           printf 'EVIDENCE_DIR=%s\n' "$evidence_dir" >> "$GITHUB_ENV"
           printf 'ASI_BASE_SHA=%s\n' "$base_sha" >> "$GITHUB_ENV"
           printf 'ASI_HEAD_SHA=%s\n' "$head_sha" >> "$GITHUB_ENV"
-          printf 'ASI_EVALUATED_SHA=%s\n' "$GITHUB_SHA" >> "$GITHUB_ENV"
+          printf 'ASI_EVALUATED_SHA=%s\n' "$evaluated_sha" >> "$GITHUB_ENV"
           printf 'ASI_BRANCH=%s\n' "$branch" >> "$GITHUB_ENV"
           printf 'ASI_BUILDER=%s\n' "$builder" >> "$GITHUB_ENV"
-          printf 'commit=%s\n' "$GITHUB_SHA"
+          printf 'ASI_REPOSITORY=%s\n' "$GITHUB_REPOSITORY" >> "$GITHUB_ENV"
+          printf 'ASI_PR_NUMBER=%s\n' "$pull_request" >> "$GITHUB_ENV"
+          printf 'evaluated_commit=%s\n' "$evaluated_sha"
           python --version
           git status --short
 
@@ -184,6 +197,17 @@ jobs:
           --policy .asi/policy.yml
           --policy-key test_honesty
 
+      - name: Independent GitHub review attestation
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          python skills/asi-verifiable-engineering/scripts/run_gate.py
+          --name independent_audit
+          --output-dir "$EVIDENCE_DIR"
+          --policy .asi/policy.yml
+          --policy-key independent_audit
+
       - name: Generate actual commit-bound evidence
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -216,6 +240,15 @@ jobs:
           python skills/asi-verifiable-engineering/scripts/finalize_measured_evidence.py \
             "$EVIDENCE_DIR/manifest.json" \
             2>&1 | tee "$EVIDENCE_DIR/finalization.log"
+
+      - name: Apply independent review attestation
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          python skills/asi-verifiable-engineering/scripts/apply_review_attestation.py \
+            "$EVIDENCE_DIR/manifest.json" \
+            "$EVIDENCE_DIR/gates/independent_audit.log" \
+            2>&1 | tee "$EVIDENCE_DIR/review-application.log"
 
       - name: Recompute and validate evidence bindings
         continue-on-error: true
