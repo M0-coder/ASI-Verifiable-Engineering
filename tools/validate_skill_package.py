@@ -12,10 +12,14 @@ NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 SECRET_PATTERNS = {
     "GitHub classic token": re.compile(r"ghp_[A-Za-z0-9]{30,}"),
-    "GitHub fine-grained token": re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),
+    "GitHub fine-grained token": re.compile(
+        r"github_pat_[A-Za-z0-9_]{20,}"
+    ),
     "OpenAI-style key": re.compile(r"sk-[A-Za-z0-9]{20,}"),
     "AWS access key": re.compile(r"AKIA[0-9A-Z]{16}"),
-    "Private key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+    "Private key": re.compile(
+        r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"
+    ),
 }
 
 REQUIRED_PACKAGE_FILES = {
@@ -25,18 +29,22 @@ REQUIRED_PACKAGE_FILES = {
     "references/annex-b-assurance.md",
     "references/annex-c-control-matrix.md",
     "references/annex-d-policy-as-code.md",
+    "references/annex-e-automated-acceptance.md",
     "assets/policy.example.yml",
     "assets/audit-report.md",
     "assets/change-budget.md",
     "assets/evidence-manifest.example.json",
     "scripts/validate_policy.py",
     "scripts/validate_evidence.py",
+    "scripts/evaluate_change.py",
 }
 
 
 def parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
     if not text.startswith("---\n"):
-        raise ValueError("SKILL.md must begin with YAML frontmatter delimited by ---.")
+        raise ValueError(
+            "SKILL.md must begin with YAML frontmatter delimited by ---."
+        )
     closing = text.find("\n---\n", 4)
     if closing == -1:
         raise ValueError("SKILL.md frontmatter is not closed with ---.")
@@ -52,7 +60,9 @@ def parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
         if line.startswith("  ") and current_parent:
             key, separator, value = line.strip().partition(":")
             if separator:
-                fields[f"{current_parent}.{key}"] = value.strip().strip('"\'')
+                fields[f"{current_parent}.{key}"] = (
+                    value.strip().strip('"\'')
+                )
             continue
         key, separator, value = line.partition(":")
         if not separator:
@@ -71,13 +81,16 @@ def parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
 def repository_root(skill_dir: Path) -> Path:
     current = skill_dir.resolve()
     for candidate in (current, *current.parents):
-        if (candidate / "VERSION").is_file() and (candidate / ".github").exists():
+        if (
+            (candidate / "VERSION").is_file()
+            and (candidate / ".github").exists()
+        ):
             return candidate
     raise ValueError("Could not locate repository root from skill directory.")
 
 
 def _has_invalid_trailing_whitespace(path: Path, content: str) -> bool:
-    """Allow Markdown's intentional two-space hard line break, reject other cases."""
+    """Allow Markdown's intentional two-space hard line break."""
     for line in content.splitlines(True):
         raw = line.rstrip("\n\r")
         trailing_spaces = len(raw) - len(raw.rstrip(" "))
@@ -111,9 +124,15 @@ def validate_package(skill_dir: Path) -> list[str]:
     elif len(name) > 64:
         errors.append("Frontmatter `name` exceeds 64 characters.")
     elif not NAME_RE.fullmatch(name):
-        errors.append("Frontmatter `name` must contain lowercase letters, numbers, and single hyphens only.")
+        errors.append(
+            "Frontmatter `name` must contain lowercase letters, "
+            "numbers, and single hyphens only."
+        )
     elif name != skill_dir.name:
-        errors.append(f"Frontmatter name {name!r} must match directory {skill_dir.name!r}.")
+        errors.append(
+            f"Frontmatter name {name!r} must match directory "
+            f"{skill_dir.name!r}."
+        )
 
     if not description:
         errors.append("Frontmatter field `description` is required.")
@@ -128,11 +147,19 @@ def validate_package(skill_dir: Path) -> list[str]:
 
     line_count = len(text.splitlines())
     if line_count > 500:
-        errors.append(f"SKILL.md has {line_count} lines; keep it at or below 500.")
+        errors.append(
+            f"SKILL.md has {line_count} lines; keep it at or below 500."
+        )
 
-    missing_files = sorted(path for path in REQUIRED_PACKAGE_FILES if not (skill_dir / path).is_file())
+    missing_files = sorted(
+        path
+        for path in REQUIRED_PACKAGE_FILES
+        if not (skill_dir / path).is_file()
+    )
     if missing_files:
-        errors.append("Missing package files: " + ", ".join(missing_files))
+        errors.append(
+            "Missing package files: " + ", ".join(missing_files)
+        )
 
     for target in LINK_RE.findall(body):
         if target.startswith(("http://", "https://", "#", "mailto:")):
@@ -141,7 +168,10 @@ def validate_package(skill_dir: Path) -> list[str]:
         if not clean:
             continue
         if clean.count("/") > 1:
-            errors.append(f"Reference is nested too deeply for progressive disclosure: {target}")
+            errors.append(
+                "Reference is nested too deeply for progressive disclosure: "
+                f"{target}"
+            )
         if not (skill_dir / clean).exists():
             errors.append(f"Broken local reference in SKILL.md: {target}")
 
@@ -152,11 +182,14 @@ def validate_package(skill_dir: Path) -> list[str]:
         root = None
 
     if root:
-        version = (root / "VERSION").read_text(encoding="utf-8").strip()
+        version = (root / "VERSION").read_text(
+            encoding="utf-8"
+        ).strip()
         metadata_version = fields.get("metadata.version")
         if metadata_version != version:
             errors.append(
-                f"metadata.version {metadata_version!r} does not match VERSION {version!r}."
+                f"metadata.version {metadata_version!r} does not match "
+                f"VERSION {version!r}."
             )
 
         for path in root.rglob("*"):
@@ -167,10 +200,16 @@ def validate_package(skill_dir: Path) -> list[str]:
             except UnicodeDecodeError:
                 continue
             if _has_invalid_trailing_whitespace(path, content):
-                errors.append(f"Invalid trailing whitespace detected: {path.relative_to(root)}")
+                errors.append(
+                    "Invalid trailing whitespace detected: "
+                    f"{path.relative_to(root)}"
+                )
             for label, pattern in SECRET_PATTERNS.items():
                 if pattern.search(content):
-                    errors.append(f"Potential {label} detected in {path.relative_to(root)}")
+                    errors.append(
+                        f"Potential {label} detected in "
+                        f"{path.relative_to(root)}"
+                    )
 
     return errors
 
