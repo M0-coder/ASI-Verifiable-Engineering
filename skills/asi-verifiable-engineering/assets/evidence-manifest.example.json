@@ -5,73 +5,145 @@
   "branch": "feature/example",
   "base_commit": "0000000000000000000000000000000000000000",
   "evaluated_commit": "1111111111111111111111111111111111111111",
+  "integrable_commit": "1111111111111111111111111111111111111111",
   "policy_version": 1,
+  "policy_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "diff_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
   "doctrine_version": "1.2",
-  "skill_version": "0.1.0-draft.1",
+  "skill_version": "0.1.0-draft.2",
   "risk": "medium",
-  "evidence_level": "E5",
+  "evidence_level": "E6",
   "assurance_level": "T4",
   "independence": [
     "I1",
     "I2"
   ],
   "environment": {
-    "os": "example",
-    "architecture": "example",
-    "runtime": "example",
-    "package_manager": "example",
-    "lockfile_digest": "sha256:example"
+    "os": "linux",
+    "architecture": "x86_64",
+    "runtime": "python-3.12",
+    "package_manager": "stdlib",
+    "lockfile_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  },
+  "changed_files": [
+    "src/example.py",
+    "tests/test_example.py"
+  ],
+  "change_budget": {
+    "expected_files": [
+      "src/example.py",
+      "tests/test_example.py"
+    ],
+    "unexpected_files": [],
+    "within_budget": true
   },
   "commands": [
     {
       "name": "unit_tests",
-      "command": "example-test-command",
+      "command": "python -m unittest",
       "started_at": "2026-08-05T15:00:00Z",
       "duration_seconds": 1.0,
       "exit_code": 0,
       "artifact": "artifacts/unit-tests.xml",
-      "artifact_digest": "sha256:example"
+      "artifact_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
     }
   ],
   "gates": {
     "integrity": "passed",
     "format_check": "passed",
     "lint": "passed",
-    "typecheck": "not_applicable",
+    "typecheck": "passed",
     "build": "passed",
     "unit_tests": "passed",
     "integration_tests": "passed",
-    "security_scan": "passed",
+    "secret_scan": "passed",
     "dependency_scan": "passed",
     "independent_audit": "passed"
   },
+  "gate_evidence": {
+    "integrity": {
+      "artifact": "artifacts/ci-summary.json",
+      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    "format_check": {
+      "artifact": "artifacts/ci-summary.json",
+      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    "lint": {
+      "artifact": "artifacts/ci-summary.json",
+      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    "typecheck": {
+      "artifact": "artifacts/ci-summary.json",
+      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    "build": {
+      "artifact": "artifacts/ci-summary.json",
+      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    "unit_tests": {
+      "artifact": "artifacts/unit-tests.xml",
+      "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    "integration_tests": {
+      "artifact": "artifacts/ci-summary.json",
+      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    "secret_scan": {
+      "artifact": "artifacts/ci-summary.json",
+      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    "dependency_scan": {
+      "artifact": "artifacts/ci-summary.json",
+      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    "independent_audit": {
+      "artifact": "artifacts/audit.json",
+      "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+    }
+  },
   "test_honesty": {
     "method": "fails_on_base_passes_on_head",
-    "evidence": "artifacts/test-honesty.txt"
+    "evidence": "artifacts/test-honesty.txt",
+    "digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+  },
+  "review": {
+    "builder": "builder-agent",
+    "auditor": "auditor-agent",
+    "same_context": false,
+    "human_review": {
+      "required": false,
+      "completed": false,
+      "mode": "none"
+    }
   },
   "artifacts": [
     {
-      "path": "artifacts/unit-tests.xml",
-      "digest": "sha256:example",
+      "path": "artifacts/ci-summary.json",
+      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
       "producer": "ci"
+    },
+    {
+      "path": "artifacts/unit-tests.xml",
+      "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "producer": "ci"
+    },
+    {
+      "path": "artifacts/audit.json",
+      "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+      "producer": "independent-auditor"
     }
   ],
   "unverified": [],
   "residual_risks": [],
-  "decision": "CONDITIONAL",
-  "conditions": [
-    {
-      "condition": "Complete observation window",
-      "owner": "example-owner",
-      "expires_at": "2026-08-12T15:00:00Z"
-    }
-  ],
+  "decision": "APPROVED",
+  "conditions": [],
   "rollback": {
     "reference": "docs/rollback.md",
     "tested": true
   },
   "approved_by": [
-    "example-auditor"
+    "auditor-agent"
   ],
   "created_at": "2026-08-05T15:00:00Z",
   "expires_at": "2026-08-12T15:00:00Z"
