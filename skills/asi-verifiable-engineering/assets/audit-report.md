@@ -2,12 +2,18 @@
 
 ## Resumen ejecutivo
 
-- **Decisión:** APROBADO | APROBADO CONDICIONALMENTE | BLOQUEADO | RECHAZADO
+- **Decisión reclamada:** APROBADO | CONDICIONAL | BLOQUEADO | RECHAZADO
+- **Decisión derivada:** APROBADO | CONDICIONAL | BLOQUEADO | RECHAZADO
+- **Elegibilidad automática:** sí | no
+- **Revisión línea por línea requerida:** no por defecto | excepcional
+- **Modo de revisión humana:** none | targeted | targeted_dual | exception_only
 - **Repositorio:**
 - **Rama:**
 - **Commit base:**
 - **Commit evaluado:**
-- **Política:**
+- **Commit integrable:**
+- **Digest de política:**
+- **Digest del diff:**
 - **Riesgo:** bajo | medio | alto | crítico
 - **Nivel E:**
 - **Nivel T:**
@@ -29,6 +35,9 @@
 ## Presupuesto de cambio
 
 - Archivos previstos:
+- Archivos realmente modificados:
+- Archivos inesperados:
+- Dentro del presupuesto: sí | no
 - Interfaces afectadas:
 - Comportamiento que cambia:
 - Comportamiento que debe preservarse:
@@ -38,30 +47,44 @@
 
 ## Matriz de evidencia
 
-| Área | Comando | Código de salida | Resultado | Nivel E | Artefacto/digest | Limitación |
-|---|---|---:|---|---|---|---|
-| Integridad | | | | | | |
-| Formato | | | | | | |
-| Lint | | | | | | |
-| Tipos | | | | | | |
-| Build | | | | | | |
-| Unitarias | | | | | | |
-| Integración | | | | | | |
-| E2E/instrumentadas | | | | | | |
-| Cobertura | | | | | | |
-| Seguridad | | | | | | |
-| Dependencias | | | | | | |
-| Mutation/fuzzing | | | | | | |
-| CI integrable | | | | | | |
-| Operación/rollback | | | | | | |
+| Puerta | Estado | Comando | Código de salida | Nivel E | Artefacto | Digest | Limitación |
+|---|---|---|---:|---|---|---|---|
+| Integridad | | | | | | | |
+| Formato | | | | | | | |
+| Lint | | | | | | | |
+| Tipos | | | | | | | |
+| Build | | | | | | | |
+| Unitarias | | | | | | | |
+| Integración | | | | | | | |
+| E2E/instrumentadas | | | | | | | |
+| Seguridad | | | | | | | |
+| Secretos | | | | | | | |
+| Dependencias | | | | | | | |
+| Auditoría independiente | | | | | | | |
+| Mutation/fuzzing | | | | | | | |
+| CI integrable | | | | | | | |
+| Operación/rollback | | | | | | | |
 
 ## Prueba de honestidad
 
+- Método: fails_on_base_passes_on_head | revert_fix_makes_test_fail | mutation_testing | independent_negative_test
 - Prueba nueva o modificada:
 - Evidencia de fallo antes del cambio:
 - Evidencia de éxito después del cambio:
-- Mutante, reversión temporal o prueba negativa usada:
+- Artefacto:
+- Digest:
 - Resultado:
+
+## Independencia
+
+- Constructor:
+- Auditor:
+- Contextos separados: sí | no
+- Nivel I:
+- Revisión humana requerida: sí | no
+- Revisión humana completada: sí | no
+- Modo: none | targeted | targeted_dual
+- Conflictos de independencia:
 
 ## Hallazgos
 
@@ -99,20 +122,28 @@
 - Procedimiento:
 - Tiempo estimado de recuperación:
 - Datos o artefactos requeridos:
+- Ensayado: sí | no
 - Evidencia de ensayo:
 
-## Revisión independiente
+## Resultado del motor
 
-- Auditor:
-- Nivel I:
-- Commit revisado:
-- Hallazgos:
-- Conflictos de independencia:
-- Decisión recomendada:
+```json
+{
+  "decision": "",
+  "automatic_approval_eligible": false,
+  "approval_basis": "policy_and_primary_evidence",
+  "line_by_line_review_required": false,
+  "human_review_mode": "",
+  "human_action": "",
+  "blockers": [],
+  "notes": []
+}
+```
 
 ## Decisión final
 
-- Decisión:
+- Decisión derivada:
+- Coincide con la decisión reclamada: sí | no
 - Justificación basada en evidencia:
 - Condiciones, si existen:
 - Aprobador:
