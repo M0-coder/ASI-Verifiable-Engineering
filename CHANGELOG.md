@@ -39,6 +39,11 @@ All notable changes to ASI Verifiable Engineering are recorded here.
 - Removed the invalid PR-number-zero path from `push` verification.
 - Synchronized the primary Skill with evidence-derived decision authority and the target-observation contract.
 
+### Verified
+
+- The commit-bound CI run confirms 36 tests, valid evidence bindings, E6 / T4 / I2, deterministic package construction, source rollback, and a clean change budget.
+- The only remaining failed gates require external state: effective branch protection, independent review, and target-environment observation.
+
 ## [0.1.0-draft.1] - 2026-08-05
 
 ### Added
