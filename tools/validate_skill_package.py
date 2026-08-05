@@ -76,6 +76,19 @@ def repository_root(skill_dir: Path) -> Path:
     raise ValueError("Could not locate repository root from skill directory.")
 
 
+def _has_invalid_trailing_whitespace(path: Path, content: str) -> bool:
+    """Allow Markdown's intentional two-space hard line break, reject other cases."""
+    for line in content.splitlines(True):
+        raw = line.rstrip("\n\r")
+        trailing_spaces = len(raw) - len(raw.rstrip(" "))
+        if trailing_spaces == 0:
+            continue
+        if path.suffix.lower() == ".md" and trailing_spaces == 2:
+            continue
+        return True
+    return False
+
+
 def validate_package(skill_dir: Path) -> list[str]:
     errors: list[str] = []
     skill_dir = skill_dir.resolve()
@@ -153,8 +166,8 @@ def validate_package(skill_dir: Path) -> list[str]:
                 content = path.read_text(encoding="utf-8")
             except UnicodeDecodeError:
                 continue
-            if any(line.rstrip("\n\r") != line.rstrip("\n\r ") for line in content.splitlines(True)):
-                errors.append(f"Trailing whitespace detected: {path.relative_to(root)}")
+            if _has_invalid_trailing_whitespace(path, content):
+                errors.append(f"Invalid trailing whitespace detected: {path.relative_to(root)}")
             for label, pattern in SECRET_PATTERNS.items():
                 if pattern.search(content):
                     errors.append(f"Potential {label} detected in {path.relative_to(root)}")
