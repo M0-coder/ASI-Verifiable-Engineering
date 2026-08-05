@@ -1,10 +1,10 @@
 ---
 name: asi-verifiable-engineering
-description: Audita, modifica, verifica y decide sobre cambios de software mediante ingeniería dirigida por evidencia, TDD, clasificación de riesgo, revisión independiente, CI reproducible y rollback. Úsala al revisar código generado por IA, auditar repositorios, corregir defectos, evaluar pull requests o decidir si un commit puede integrarse o desplegarse.
-compatibility: Requiere acceso de lectura al repositorio y, para verificar, acceso a sus herramientas de build, pruebas y CI. Los cambios de riesgo alto o crítico requieren aprobación humana.
+description: Audita, modifica, verifica y decide sobre cambios de software mediante ingeniería dirigida por evidencia, TDD, clasificación de riesgo, revisión independiente, CI reproducible, decisión derivada y rollback. Úsala al revisar código generado por IA, auditar repositorios, corregir defectos, evaluar pull requests o decidir si un commit puede integrarse sin depender de revisión línea por línea.
+compatibility: Requiere acceso de lectura al repositorio y, para verificar, acceso a sus herramientas de build, pruebas y CI. Los cambios de riesgo alto o crítico requieren aprobación humana dirigida por riesgo.
 metadata:
   author: Eidon
-  version: "0.1.0-draft.1"
+  version: "0.1.0-draft.2"
   doctrine-version: "1.2"
   repository: morimilpabfelon-cell/ASI-Verifiable-Engineering
 ---
@@ -13,9 +13,11 @@ metadata:
 
 ## Propósito
 
-Aplicar una cadena estricta de ingeniería verificable. El código no se aprueba porque una persona o una IA lo haya leído, explicado o considerado convincente. Solo puede aprobarse un commit específico cuando supera las puertas exigidas por su riesgo y la evidencia está vinculada a ese commit.
+Aplicar una cadena estricta de ingeniería verificable cuyo objetivo operativo sea evitar que el propietario tenga que revisar manualmente cada línea de código.
 
-TDD dirige la construcción. La evidencia, la independencia, CI, la observación operativa y el rollback gobiernan la aprobación.
+El código no se aprueba porque una persona o una IA lo haya leído, explicado o considerado convincente. Solo puede aprobarse un commit específico cuando supera las puertas exigidas por su riesgo y un motor independiente deriva la decisión desde evidencia vinculada a ese commit.
+
+TDD dirige la construcción. La evidencia, la independencia, CI, la decisión derivada, la observación operativa y el rollback gobiernan la aprobación.
 
 ## Activación
 
@@ -27,7 +29,8 @@ Usa esta Skill cuando la tarea incluya cualquiera de estos objetivos:
 - verificar compilación, pruebas, seguridad, arquitectura o CI;
 - decidir si un cambio está listo para integrar o desplegar;
 - crear o validar `.asi/policy.yml`;
-- producir un paquete de evidencia o una decisión formal.
+- producir un paquete de evidencia o una decisión formal;
+- configurar aprobación sin revisión línea por línea.
 
 No la uses como sustituto de los comandos reales del repositorio, CI, protección de ramas ni aprobación humana exigida por riesgo.
 
@@ -50,6 +53,7 @@ Lee [la doctrina principal](references/core-doctrine.md) para las reglas general
 - [Aseguramiento T0–T6](references/annex-b-assurance.md)
 - [Riesgo, independencia y decisión](references/annex-c-control-matrix.md)
 - [Policy-as-code](references/annex-d-policy-as-code.md)
+- [Aprobación sin revisión línea por línea](references/annex-e-automated-acceptance.md)
 
 ## Principios no negociables
 
@@ -62,6 +66,8 @@ Lee [la doctrina principal](references/core-doctrine.md) para las reglas general
 - Una puerta no ejecutada es `NO VERIFICADO`, nunca aprobada.
 - Una puerta fallida bloquea; no se convierte en advertencia por decisión del agente.
 - La explicación narrativa tiene menos autoridad que artefactos, CI y logs reproducibles.
+- La decisión escrita en un manifiesto es una reclamación; el motor debe derivarla nuevamente.
+- La revisión línea por línea no es una puerta predeterminada ni sustituye evidencia ejecutable.
 
 ## Flujo de trabajo
 
@@ -125,7 +131,23 @@ El auditor debe comenzar en solo lectura y tratar la explicación del constructo
 
 Si encuentra un fallo, no lo corrijas silenciosamente dentro de la auditoría. Registra el hallazgo, devuelve el cambio al constructor, exige un nuevo commit y repite la verificación.
 
-### Fase 6 — Operación
+### Fase 6 — Decisión derivada
+
+No aceptes directamente el campo `decision` del manifiesto. Ejecuta:
+
+```bash
+python skills/asi-verifiable-engineering/scripts/validate_policy.py .asi/policy.yml
+python skills/asi-verifiable-engineering/scripts/validate_evidence.py .asi/evidence/manifest.json
+python skills/asi-verifiable-engineering/scripts/evaluate_change.py \
+  .asi/policy.yml \
+  .asi/evidence/manifest.json
+```
+
+El evaluador debe comprobar commit integrable, digests, presupuesto, puertas, evidencia por puerta, códigos de salida, honestidad de pruebas, independencia, niveles E/T/I, elementos no verificados y rollback.
+
+Una reclamación `APPROVED` que no coincide con la decisión derivada produce `BLOCKED`.
+
+### Fase 7 — Operación
 
 Para riesgo alto o crítico, verifica además:
 
@@ -175,10 +197,38 @@ La confianza caduca cuando cambia código, dependencia, runtime, infraestructura
 |---|---|---|---|
 | Bajo | I1 + I2 | T4 | Automática con muestreo humano |
 | Medio | I1 + I2 | T4 | Automática solo con rollback y sin dudas relevantes |
-| Alto | I2 + I3 | T5 | Humana explícita |
+| Alto | I2 + I3 | T5 | Humana dirigida por riesgo |
 | Crítico | I2 + control dual humano | T6 cuando aplique | Prohibida la aprobación autónoma |
 
 El tamaño del diff no reduce el riesgo. Una línea que altere permisos, dinero, borrado, claves, migraciones, CI o infraestructura puede ser alta o crítica.
+
+## Aprobación sin revisión línea por línea
+
+La política estricta debe contener:
+
+```yaml
+automated_acceptance:
+  enabled: true
+  eligible_risks:
+    - low
+    - medium
+  line_by_line_review_default: false
+  require_all_required_gates_passed: true
+  require_no_unverified: true
+  require_no_residual_risks_for_automatic: true
+  require_test_honesty: true
+  require_change_budget: true
+  require_distinct_builder_auditor: true
+  require_rollback_tested: true
+  require_policy_digest: true
+  require_diff_digest: true
+```
+
+Riesgo bajo o medio puede aprobarse automáticamente cuando el motor deriva `APPROVED`, alcanza al menos T4/E6/I1+I2 y no quedan elementos no verificados, riesgos residuales, condiciones, puertas fallidas ni archivos inesperados.
+
+Riesgo alto o crítico exige revisión humana dirigida por riesgo, no necesariamente lectura exhaustiva. La persona revisa intención, arquitectura, permisos, datos, dinero, secretos, irreversibilidad, excepciones y contención. El modo es `targeted` o `targeted_dual`.
+
+La lectura línea por línea queda como herramienta forense excepcional ante evidencia manipulada, código masivo no acotado, ofuscación, incidentes o propiedades críticas sin prueba adecuada. Nunca aprueba por sí sola.
 
 ## Acciones prohibidas sin autorización explícita
 
@@ -221,21 +271,25 @@ Detenerse significa preservar, registrar evidencia y proponer el siguiente paso 
 
 Usa [el manifiesto de evidencia](assets/evidence-manifest.example.json) y [la plantilla de auditoría](assets/audit-report.md). Como mínimo registra:
 
-- repositorio, base y commit evaluado;
+- repositorio, base, commit evaluado y commit integrable;
+- digest de política y diff;
 - política y entorno;
 - riesgo, niveles E, T e I;
-- diff y archivos modificados;
+- archivos modificados y presupuesto;
 - comandos exactos y códigos de salida;
-- artefactos y digests;
+- estado y artefacto de cada puerta;
+- digests de artefactos;
+- evidencia de honestidad de las pruebas;
+- identidades separadas de constructor y auditor;
 - pruebas, seguridad y controles omitidos;
 - elementos no verificados;
 - riesgos residuales;
 - rollback;
-- decisión y expiración de la confianza.
+- decisión reclamada, decisión derivada y expiración de confianza.
 
 ## Decisión final
 
-Devuelve exactamente una decisión principal:
+Devuelve exactamente una decisión principal derivada:
 
 ### APROBADO
 
@@ -247,14 +301,14 @@ Solo para riesgo bajo o medio. Incluye condición, propietario, control compensa
 
 ### BLOQUEADO
 
-Existe una puerta fallida, evidencia insuficiente, riesgo no mitigado o falta de autorización.
+Existe una puerta fallida, evidencia insuficiente, riesgo no mitigado, decisión reclamada inconsistente o falta de autorización.
 
 ### RECHAZADO
 
 El enfoque es incorrecto, excede el riesgo aceptable o requiere rediseño.
 
-Comienza la salida con decisión, commit, riesgo, niveles E/T/I, bloqueadores, elementos no verificados y acción humana requerida. No uses expresiones como “casi listo”, “debe funcionar” o “todo correcto”.
+Comienza la salida con decisión, commit, riesgo, niveles E/T/I, elegibilidad automática, bloqueadores, elementos no verificados y acción humana requerida. No uses expresiones como “casi listo”, “debe funcionar” o “todo correcto”.
 
 ## Criterio de terminado
 
-Código escrito no significa terminado. Una tarea termina cuando el comportamiento fue definido, demostrado, reproducido, protegido, revisado según riesgo, documentado, asociado a rollback y aceptado mediante evidencia.
+Código escrito no significa terminado. Una tarea termina cuando el comportamiento fue definido, demostrado, reproducido, protegido, revisado según riesgo, documentado, asociado a rollback y aceptado por el motor mediante evidencia.
