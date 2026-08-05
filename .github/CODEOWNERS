@@ -1,0 +1,13 @@
+# Default owner
+* @morimilpabfelon-cell
+
+# Governance and enforcement
+/.asi/ @morimilpabfelon-cell
+/.github/ @morimilpabfelon-cell
+/tools/ @morimilpabfelon-cell
+/tests/ @morimilpabfelon-cell
+
+# Skill definition and executable validators
+/skills/asi-verifiable-engineering/SKILL.md @morimilpabfelon-cell
+/skills/asi-verifiable-engineering/references/ @morimilpabfelon-cell
+/skills/asi-verifiable-engineering/scripts/ @morimilpabfelon-cell
