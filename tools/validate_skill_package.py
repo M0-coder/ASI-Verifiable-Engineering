@@ -34,9 +34,23 @@ REQUIRED_PACKAGE_FILES = {
     "assets/audit-report.md",
     "assets/change-budget.md",
     "assets/evidence-manifest.example.json",
-    "scripts/validate_policy.py",
-    "scripts/validate_evidence.py",
     "scripts/evaluate_change.py",
+    "scripts/generate_ci_evidence.py",
+    "scripts/run_gate.py",
+    "scripts/scan_secrets.py",
+    "scripts/scan_supply_chain.py",
+    "scripts/validate_evidence.py",
+    "scripts/validate_policy.py",
+    "scripts/verify_change_budget.py",
+}
+
+REQUIRED_REPOSITORY_FILES = {
+    ".asi/change-budget.json",
+    ".asi/policy.yml",
+    ".github/workflows/validate-skill.yml",
+    "requirements-ci.lock",
+    "tests/test_adversarial_controls.py",
+    "tests/test_integration_evidence.py",
 }
 
 
@@ -53,16 +67,13 @@ def parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
     body = text[closing + 5 :]
     fields: dict[str, str] = {}
     current_parent: str | None = None
-
     for line in raw.splitlines():
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         if line.startswith("  ") and current_parent:
             key, separator, value = line.strip().partition(":")
             if separator:
-                fields[f"{current_parent}.{key}"] = (
-                    value.strip().strip('"\'')
-                )
+                fields[f"{current_parent}.{key}"] = value.strip().strip('"\'')
             continue
         key, separator, value = line.partition(":")
         if not separator:
@@ -74,23 +85,18 @@ def parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
             current_parent = None
         else:
             current_parent = key
-
     return fields, body
 
 
 def repository_root(skill_dir: Path) -> Path:
     current = skill_dir.resolve()
     for candidate in (current, *current.parents):
-        if (
-            (candidate / "VERSION").is_file()
-            and (candidate / ".github").exists()
-        ):
+        if (candidate / "VERSION").is_file() and (candidate / ".github").exists():
             return candidate
     raise ValueError("Could not locate repository root from skill directory.")
 
 
 def _has_invalid_trailing_whitespace(path: Path, content: str) -> bool:
-    """Allow Markdown's intentional two-space hard line break."""
     for line in content.splitlines(True):
         raw = line.rstrip("\n\r")
         trailing_spaces = len(raw) - len(raw.rstrip(" "))
@@ -106,7 +112,6 @@ def validate_package(skill_dir: Path) -> list[str]:
     errors: list[str] = []
     skill_dir = skill_dir.resolve()
     skill_file = skill_dir / "SKILL.md"
-
     if not skill_file.is_file():
         return [f"Missing required file: {skill_file}"]
 
@@ -118,20 +123,18 @@ def validate_package(skill_dir: Path) -> list[str]:
 
     name = fields.get("name", "")
     description = fields.get("description", "")
-
     if not name:
         errors.append("Frontmatter field `name` is required.")
     elif len(name) > 64:
         errors.append("Frontmatter `name` exceeds 64 characters.")
     elif not NAME_RE.fullmatch(name):
         errors.append(
-            "Frontmatter `name` must contain lowercase letters, "
-            "numbers, and single hyphens only."
+            "Frontmatter `name` must contain lowercase letters, numbers, "
+            "and single hyphens only."
         )
     elif name != skill_dir.name:
         errors.append(
-            f"Frontmatter name {name!r} must match directory "
-            f"{skill_dir.name!r}."
+            f"Frontmatter name {name!r} must match directory {skill_dir.name!r}."
         )
 
     if not description:
@@ -144,73 +147,66 @@ def validate_package(skill_dir: Path) -> list[str]:
     compatibility = fields.get("compatibility")
     if compatibility and len(compatibility) > 500:
         errors.append("Frontmatter `compatibility` exceeds 500 characters.")
+    if len(text.splitlines()) > 500:
+        errors.append("SKILL.md must remain at or below 500 lines.")
 
-    line_count = len(text.splitlines())
-    if line_count > 500:
-        errors.append(
-            f"SKILL.md has {line_count} lines; keep it at or below 500."
-        )
-
-    missing_files = sorted(
-        path
-        for path in REQUIRED_PACKAGE_FILES
-        if not (skill_dir / path).is_file()
+    missing_package = sorted(
+        path for path in REQUIRED_PACKAGE_FILES if not (skill_dir / path).is_file()
     )
-    if missing_files:
-        errors.append(
-            "Missing package files: " + ", ".join(missing_files)
-        )
+    if missing_package:
+        errors.append("Missing package files: " + ", ".join(missing_package))
 
     for target in LINK_RE.findall(body):
         if target.startswith(("http://", "https://", "#", "mailto:")):
             continue
         clean = target.split("#", 1)[0]
-        if not clean:
-            continue
+        if clean and not (skill_dir / clean).exists():
+            errors.append(f"Broken local reference in SKILL.md: {target}")
         if clean.count("/") > 1:
             errors.append(
                 "Reference is nested too deeply for progressive disclosure: "
                 f"{target}"
             )
-        if not (skill_dir / clean).exists():
-            errors.append(f"Broken local reference in SKILL.md: {target}")
 
     try:
         root = repository_root(skill_dir)
     except ValueError as exc:
         errors.append(str(exc))
-        root = None
+        return errors
 
-    if root:
-        version = (root / "VERSION").read_text(
-            encoding="utf-8"
-        ).strip()
-        metadata_version = fields.get("metadata.version")
-        if metadata_version != version:
+    missing_repository = sorted(
+        path for path in REQUIRED_REPOSITORY_FILES if not (root / path).is_file()
+    )
+    if missing_repository:
+        errors.append(
+            "Missing repository controls: " + ", ".join(missing_repository)
+        )
+    if (root / ".asi" / "evidence-inputs").exists():
+        errors.append("Legacy .asi/evidence-inputs directory must not exist.")
+
+    version = (root / "VERSION").read_text(encoding="utf-8").strip()
+    if fields.get("metadata.version") != version:
+        errors.append(
+            f"metadata.version {fields.get('metadata.version')!r} does not "
+            f"match VERSION {version!r}."
+        )
+
+    for path in root.rglob("*"):
+        if not path.is_file() or ".git" in path.parts:
+            continue
+        try:
+            content = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        if _has_invalid_trailing_whitespace(path, content):
             errors.append(
-                f"metadata.version {metadata_version!r} does not match "
-                f"VERSION {version!r}."
+                f"Invalid trailing whitespace detected: {path.relative_to(root)}"
             )
-
-        for path in root.rglob("*"):
-            if not path.is_file() or ".git" in path.parts:
-                continue
-            try:
-                content = path.read_text(encoding="utf-8")
-            except UnicodeDecodeError:
-                continue
-            if _has_invalid_trailing_whitespace(path, content):
+        for label, pattern in SECRET_PATTERNS.items():
+            if pattern.search(content):
                 errors.append(
-                    "Invalid trailing whitespace detected: "
-                    f"{path.relative_to(root)}"
+                    f"Potential {label} detected in {path.relative_to(root)}"
                 )
-            for label, pattern in SECRET_PATTERNS.items():
-                if pattern.search(content):
-                    errors.append(
-                        f"Potential {label} detected in "
-                        f"{path.relative_to(root)}"
-                    )
-
     return errors
 
 
@@ -218,14 +214,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("skill_dir", type=Path)
     args = parser.parse_args(argv)
-
     errors = validate_package(args.skill_dir)
     if errors:
         print("ASI Skill validation failed:", file=sys.stderr)
-        for error in errors:
+        for error in sorted(set(errors)):
             print(f"- {error}", file=sys.stderr)
         return 1
-
     print(f"ASI Skill package is valid: {args.skill_dir}")
     return 0
 
