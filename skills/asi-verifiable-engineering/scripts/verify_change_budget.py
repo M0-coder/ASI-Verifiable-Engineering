@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -140,22 +141,36 @@ def evaluate_budget(
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--budget", type=Path, required=True)
-    result.add_argument("--base-commit", required=True)
-    result.add_argument("--evaluated-commit", required=True)
+    result.add_argument("--base-commit")
+    result.add_argument("--evaluated-commit")
     result.add_argument("--repo-root", type=Path, default=Path.cwd())
     result.add_argument("--report", type=Path)
     return result
 
 
+def _resolve_commit(explicit: str | None, environment_name: str) -> str:
+    value = explicit or os.environ.get(environment_name)
+    if not value:
+        raise ValueError(
+            f"Commit must be provided explicitly or through {environment_name}."
+        )
+    return value
+
+
 def main() -> int:
     args = parser().parse_args()
     try:
+        base_commit = _resolve_commit(args.base_commit, "ASI_BASE_SHA")
+        evaluated_commit = _resolve_commit(
+            args.evaluated_commit,
+            "ASI_EVALUATED_SHA",
+        )
         budget = load_budget(args.budget)
         report = evaluate_budget(
             args.repo_root,
             budget,
-            args.base_commit,
-            args.evaluated_commit,
+            base_commit,
+            evaluated_commit,
         )
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"Cannot verify change budget: {exc}", file=sys.stderr)
