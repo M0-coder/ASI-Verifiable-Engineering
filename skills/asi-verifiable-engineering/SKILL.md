@@ -145,7 +145,7 @@ python skills/asi-verifiable-engineering/scripts/evaluate_change.py \
 
 El evaluador debe comprobar commit integrable, digests, presupuesto, puertas, evidencia por puerta, códigos de salida, honestidad de pruebas, independencia, niveles E/T/I, elementos no verificados y rollback.
 
-Una reclamación `APPROVED` que no coincide con la decisión derivada produce `BLOCKED`.
+La reclamación escrita en el manifiesto no tiene autoridad para fabricar ni impedir una aprobación. El motor deriva el resultado desde la evidencia verificada y registra cualquier diferencia como nota trazable.
 
 ### Fase 7 — Operación
 
@@ -156,9 +156,13 @@ Para riesgo alto o crítico, verifica además:
 - digest y procedencia del artefacto;
 - build once, promote the same artifact;
 - recuperación y rollback ensayados;
-- comportamiento posterior al despliegue.
+- comportamiento posterior al despliegue;
+- protección efectiva de la rama canónica comprobada mediante API;
+- observación externa reciente vinculada al repositorio, head, revisor y digest exacto del paquete.
 
-La confianza caduca cuando cambia código, dependencia, runtime, infraestructura, configuración, secretos, API externa o condiciones operativas.
+Una revisión humana produce independencia I3, pero no eleva por sí sola a T5. La promoción a E7/T5 exige evidencia operacional verificable del mismo paquete en `chatgpt`, `codex` u `openai-api`.
+
+La confianza caduca cuando cambia código, dependencia, runtime, infraestructura, configuración, secretos, API externa, digest del paquete o condiciones operativas.
 
 ## Escalas
 
@@ -269,7 +273,7 @@ Detenerse significa preservar, registrar evidencia y proponer el siguiente paso 
 
 ## Paquete de evidencia
 
-Usa [el manifiesto de evidencia](assets/evidence-manifest.example.json) y [la plantilla de auditoría](assets/audit-report.md). Como mínimo registra:
+Usa [el manifiesto de evidencia](assets/evidence-manifest.example.json), [el contrato de observación objetivo](assets/target-observation.example.json) y [la plantilla de auditoría](assets/audit-report.md). Como mínimo registra:
 
 - repositorio, base, commit evaluado y commit integrable;
 - digest de política y diff;
@@ -281,6 +285,8 @@ Usa [el manifiesto de evidencia](assets/evidence-manifest.example.json) y [la pl
 - digests de artefactos;
 - evidencia de honestidad de las pruebas;
 - identidades separadas de constructor y auditor;
+- protección efectiva de la rama canónica;
+- observación operacional vinculada al head y al paquete cuando se reclame E7/T5;
 - pruebas, seguridad y controles omitidos;
 - elementos no verificados;
 - riesgos residuales;
@@ -301,7 +307,7 @@ Solo para riesgo bajo o medio. Incluye condición, propietario, control compensa
 
 ### BLOQUEADO
 
-Existe una puerta fallida, evidencia insuficiente, riesgo no mitigado, decisión reclamada inconsistente o falta de autorización.
+Existe una puerta fallida, evidencia insuficiente, riesgo no mitigado o falta de autorización.
 
 ### RECHAZADO
 
