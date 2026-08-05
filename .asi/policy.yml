@@ -29,11 +29,13 @@ commands:
   lint: "python -m ruff check ."
   typecheck: "python -m mypy --config-file mypy.ini tools skills/asi-verifiable-engineering/scripts"
   build: "python tools/validate_skill_package.py skills/asi-verifiable-engineering"
+  package_installability: "python skills/asi-verifiable-engineering/scripts/verify_installability.py skills/asi-verifiable-engineering"
   unit_tests: "python -m unittest discover -s tests -p test_*.py -v"
   integration_tests: "python -m unittest discover -s tests -p test_integration*.py -v"
   secret_scan: "python skills/asi-verifiable-engineering/scripts/scan_secrets.py ."
   dependency_scan: "python skills/asi-verifiable-engineering/scripts/scan_supply_chain.py ."
   test_honesty: "python -m unittest tests.test_adversarial_controls -v"
+  rollback_check: "python skills/asi-verifiable-engineering/scripts/verify_source_rollback.py"
 
 required_gates:
   integrity: true
@@ -41,10 +43,12 @@ required_gates:
   lint: true
   typecheck: true
   build: true
+  package_installability: true
   unit_tests: true
   integration_tests: true
   secret_scan: true
   dependency_scan: true
+  rollback_check: true
   independent_audit: true
 
 risk_escalation:
