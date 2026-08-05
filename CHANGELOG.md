@@ -47,7 +47,7 @@ All notable changes to ASI Verifiable Engineering are recorded here.
 
 ### Verified state
 
-- Workflow run `31045493029` evaluated head `cba0bd5c50d36e3cb373894c11fa6a2a614dee56` and integrable commit `d8df9399e94a1dacda5f55ca69a430c8edeb2ff0`.
+- Workflow run `31045644519` evaluated head `57be3dffd7689736700054decff313a421f2fc9f` and integrable commit `a662e4bc494001bbfc7572fa4e4c877afff99d42`.
 - All internal technical gates passed.
 - 36 tests passed.
 - Evidence reached E6/T4/I2.
