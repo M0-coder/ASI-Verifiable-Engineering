@@ -58,6 +58,7 @@ REQUIRED_REPOSITORY_FILES = {
     "requirements-ci.lock",
     "tests/test_adversarial_controls.py",
     "tests/test_integration_evidence.py",
+    "tests/test_review_attestation.py",
 }
 
 
