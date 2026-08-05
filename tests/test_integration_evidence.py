@@ -68,6 +68,7 @@ class EvidenceIntegrationTests(unittest.TestCase):
                 json.dumps(
                     {
                         "version": 1,
+                        "builder_context_id": "builder-context-integration",
                         "expected_paths": ["src.txt"],
                         "forbidden_paths": ["keys/**"],
                         "max_files": 2,
@@ -115,7 +116,7 @@ class EvidenceIntegrationTests(unittest.TestCase):
                 budget="budget.json",
                 output_dir=str(evidence),
                 repo_root=str(repo),
-                builder="builder-agent",
+                builder="builder-context-integration",
                 workflow_run="https://example.invalid/run/1",
                 risk="medium",
                 skill_version="0.1.0-test",
