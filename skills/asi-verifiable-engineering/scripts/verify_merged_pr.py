@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify that a main-branch commit came from an attested merged pull request."""
+"""Verify that a main commit came from a solo-operator attested pull request."""
 
 from __future__ import annotations
 
@@ -44,17 +44,19 @@ def fetch_associated_pull_requests(
 def evaluate_merged_commit(
     repository: str,
     commit: str,
+    builder_context_id: str,
     token: str,
 ) -> dict[str, Any]:
     candidates = fetch_associated_pull_requests(repository, commit, token)
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
+    repository_owner = repository.split("/", 1)[0]
 
     for pull_request in candidates:
         base_value = pull_request.get("base")
         head_value = pull_request.get("head")
-        user_value = pull_request.get("user")
         number_value = pull_request.get("number")
+        merged_by_value = pull_request.get("merged_by")
         reasons: list[str] = []
         if not pull_request.get("merged_at"):
             reasons.append("pull_request_is_not_merged")
@@ -65,37 +67,33 @@ def evaluate_merged_commit(
             or not isinstance(head_value.get("sha"), str)
         ):
             reasons.append("pull_request_head_is_missing")
-        if (
-            not isinstance(user_value, dict)
-            or not isinstance(user_value.get("login"), str)
-        ):
-            reasons.append("pull_request_builder_is_missing")
         if not isinstance(number_value, int) or number_value <= 0:
             reasons.append("pull_request_number_is_invalid")
+        if (
+            not isinstance(merged_by_value, dict)
+            or merged_by_value.get("login") != repository_owner
+        ):
+            reasons.append("owner_merge_authorization_missing")
         if reasons:
             rejected.append({"number": number_value, "reasons": reasons})
             continue
 
         assert isinstance(head_value, dict)
-        assert isinstance(user_value, dict)
         assert isinstance(number_value, int)
         head_sha_value = head_value.get("sha")
-        builder_value = user_value.get("login")
         assert isinstance(head_sha_value, str)
-        assert isinstance(builder_value, str)
         head_sha = head_sha_value
-        builder = builder_value
         number = number_value
 
         reviews = fetch_reviews(repository, number, token)
         attestation = evaluate_reviews(
             reviews,
-            builder,
+            builder_context_id,
             head_sha,
             repository,
         )
         if attestation.get("passed") is not True:
-            reasons.append("independent_review_attestation_missing")
+            reasons.append("separate_ai_audit_attestation_missing")
         if attestation.get("observation_passed") is not True:
             reasons.append("target_observation_attestation_missing")
         if reasons:
@@ -113,14 +111,21 @@ def evaluate_merged_commit(
                 "number": number,
                 "head_commit": head_sha,
                 "merge_commit_sha": pull_request.get("merge_commit_sha"),
+                "owner_authorization": {
+                    "level": "H1",
+                    "method": "owner_merge",
+                    "actor": repository_owner,
+                },
                 "attestation": attestation,
             }
         )
 
     return {
-        "verification_version": 1,
+        "verification_version": 2,
+        "operator_mode": "solo",
         "repository": repository,
         "main_commit": commit,
+        "builder_context_id": builder_context_id,
         "accepted_pull_requests": accepted,
         "rejected_pull_requests": rejected,
         "passed": bool(accepted),
@@ -130,15 +135,23 @@ def evaluate_merged_commit(
 def main() -> int:
     repository = os.environ.get("ASI_REPOSITORY", "")
     commit = os.environ.get("ASI_MERGED_COMMIT", "")
+    builder_context_id = os.environ.get("ASI_BUILDER_CONTEXT_ID", "")
     token = os.environ.get("GITHUB_TOKEN", "")
     try:
         if repository.count("/") != 1:
             raise ValueError("ASI_REPOSITORY must use owner/repository format.")
         if len(commit) != 40:
             raise ValueError("ASI_MERGED_COMMIT must be a full commit SHA.")
+        if not builder_context_id:
+            raise ValueError("ASI_BUILDER_CONTEXT_ID is required.")
         if not token:
             raise ValueError("GITHUB_TOKEN is required.")
-        report = evaluate_merged_commit(repository, commit, token)
+        report = evaluate_merged_commit(
+            repository,
+            commit,
+            builder_context_id,
+            token,
+        )
     except (
         OSError,
         ValueError,
@@ -147,7 +160,8 @@ def main() -> int:
         json.JSONDecodeError,
     ) as exc:
         report = {
-            "verification_version": 1,
+            "verification_version": 2,
+            "operator_mode": "solo",
             "repository": repository,
             "main_commit": commit,
             "passed": False,
