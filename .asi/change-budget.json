@@ -3,7 +3,7 @@
   "builder_context_id": "builder-context-bootstrap-solo-20260805-01",
   "change_id": "bootstrap-v0.1.0",
   "risk": "high",
-  "objective": "Bootstrap ASI Verifiable Engineering for one owner using separate AI audit contexts, deterministic CI, target observation, and no default line-by-line inspection.",
+  "objective": "Bootstrap ASI Verifiable Engineering for one owner with separate AI audit contexts and deterministic CI.",
   "expected_paths": [
     ".asi/change-budget.json",
     ".asi/policy.yml",
