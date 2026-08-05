@@ -1,21 +1,39 @@
 {
-  "observation_version": 1,
+  "attestation_version": 1,
+  "operator_mode": "solo",
   "repository": "owner/repository",
   "head_commit": "1111111111111111111111111111111111111111",
-  "reviewer": "independent-reviewer",
-  "target_environment": "codex",
-  "package_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-  "result": "passed",
-  "executed_at": "2026-08-05T18:00:00Z",
-  "checks": [
-    "Loaded the Skill from the package whose digest is declared above.",
-    "Executed the read-only startup and baseline-identification protocol.",
-    "Executed a controlled blocked case and observed a BLOCKED decision.",
-    "Executed the documented invocation contract without modifying protected state.",
-    "Confirmed that the reported limitations match the observed target environment."
-  ],
-  "limitations": [
-    "This observation covers only the named target environment and exact package digest.",
-    "A new head, package digest, target environment, or expired observation requires new evidence."
-  ]
+  "builder_context_id": "builder-context-example-01",
+  "auditor_context_id": "auditor-context-example-02",
+  "audit": {
+    "mode": "read_only",
+    "result": "passed",
+    "created_at": "2026-08-05T18:00:00Z",
+    "checks": [
+      "Verified the exact base, head, and integrable commit.",
+      "Inspected policy, budget, measured gates, and binding validation.",
+      "Confirmed that required technical gates passed.",
+      "Reviewed architecture, permissions, security, observability, and rollback by risk.",
+      "Confirmed that no source or policy file was modified during the audit."
+    ],
+    "findings": [],
+    "write_actions": []
+  },
+  "target_observation": {
+    "target_environment": "codex",
+    "package_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "result": "passed",
+    "executed_at": "2026-08-05T18:10:00Z",
+    "checks": [
+      "Loaded the Skill from the package whose digest is declared above.",
+      "Executed the read-only startup and baseline-identification protocol.",
+      "Executed a controlled blocked case and observed a BLOCKED decision.",
+      "Executed the documented invocation contract without modifying protected state.",
+      "Confirmed that reported limitations match the observed target environment."
+    ],
+    "limitations": [
+      "This observation covers only the named target environment and exact package digest.",
+      "A new head, package digest, environment, or expired observation requires new evidence."
+    ]
+  }
 }
