@@ -21,7 +21,6 @@ jobs:
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONPYCACHEPREFIX: /tmp/asi-pycache
-      EVIDENCE_DIR: ${{ runner.temp }}/asi-evidence
 
     steps:
       - name: Check out exact integrable state
@@ -37,7 +36,11 @@ jobs:
           cache: ""
 
       - name: Prepare evidence directory
-        run: mkdir -p "$EVIDENCE_DIR"
+        run: |
+          set -euo pipefail
+          evidence_dir="$RUNNER_TEMP/asi-evidence"
+          printf 'EVIDENCE_DIR=%s\n' "$evidence_dir" >> "$GITHUB_ENV"
+          mkdir -p "$evidence_dir"
 
       - name: Record baseline
         run: |
@@ -82,9 +85,11 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BRANCH: ${{ github.event.pull_request.head.ref }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
+          budget_file=".asi/evidence-inputs/pr-${PR_NUMBER}-change-budget.json"
           python skills/asi-verifiable-engineering/scripts/generate_ci_evidence.py \
             --repository "$GITHUB_REPOSITORY" \
             --branch "$PR_BRANCH" \
@@ -92,7 +97,7 @@ jobs:
             --head-commit "$HEAD_SHA" \
             --evaluated-commit "$GITHUB_SHA" \
             --policy .asi/policy.yml \
-            --budget .asi/evidence-inputs/pr-1-change-budget.json \
+            --budget "$budget_file" \
             --output-dir "$EVIDENCE_DIR" \
             --builder "$PR_AUTHOR" \
             --workflow-run "$RUN_URL" \
