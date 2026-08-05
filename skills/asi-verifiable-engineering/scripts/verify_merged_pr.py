@@ -51,27 +51,42 @@ def evaluate_merged_commit(
     rejected: list[dict[str, Any]] = []
 
     for pull_request in candidates:
-        base = pull_request.get("base")
-        head = pull_request.get("head")
-        user = pull_request.get("user")
-        number = pull_request.get("number")
+        base_value = pull_request.get("base")
+        head_value = pull_request.get("head")
+        user_value = pull_request.get("user")
+        number_value = pull_request.get("number")
         reasons: list[str] = []
         if not pull_request.get("merged_at"):
             reasons.append("pull_request_is_not_merged")
-        if not isinstance(base, dict) or base.get("ref") != "main":
+        if not isinstance(base_value, dict) or base_value.get("ref") != "main":
             reasons.append("pull_request_did_not_target_main")
-        if not isinstance(head, dict) or not isinstance(head.get("sha"), str):
+        if (
+            not isinstance(head_value, dict)
+            or not isinstance(head_value.get("sha"), str)
+        ):
             reasons.append("pull_request_head_is_missing")
-        if not isinstance(user, dict) or not isinstance(user.get("login"), str):
+        if (
+            not isinstance(user_value, dict)
+            or not isinstance(user_value.get("login"), str)
+        ):
             reasons.append("pull_request_builder_is_missing")
-        if not isinstance(number, int) or number <= 0:
+        if not isinstance(number_value, int) or number_value <= 0:
             reasons.append("pull_request_number_is_invalid")
         if reasons:
-            rejected.append({"number": number, "reasons": reasons})
+            rejected.append({"number": number_value, "reasons": reasons})
             continue
 
-        head_sha = cast(str, head["sha"])
-        builder = cast(str, user["login"])
+        assert isinstance(head_value, dict)
+        assert isinstance(user_value, dict)
+        assert isinstance(number_value, int)
+        head_sha_value = head_value.get("sha")
+        builder_value = user_value.get("login")
+        assert isinstance(head_sha_value, str)
+        assert isinstance(builder_value, str)
+        head_sha = head_sha_value
+        builder = builder_value
+        number = number_value
+
         reviews = fetch_reviews(repository, number, token)
         attestation = evaluate_reviews(
             reviews,
