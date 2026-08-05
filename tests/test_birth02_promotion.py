@@ -33,11 +33,6 @@ protection = load_module(
 class BranchProtectionTests(unittest.TestCase):
     def protected_branch(self) -> dict[str, object]:
         return {
-            "required_pull_request_reviews": {
-                "required_approving_review_count": 1,
-                "dismiss_stale_reviews": True,
-                "require_code_owner_reviews": True,
-            },
             "required_status_checks": {
                 "strict": True,
                 "checks": [
@@ -53,20 +48,18 @@ class BranchProtectionTests(unittest.TestCase):
             "allow_deletions": {"enabled": False},
         }
 
-    def test_strict_main_protection_passes(self) -> None:
+    def test_solo_operator_main_protection_passes_without_human_reviews(self) -> None:
         report = protection.evaluate_protection(
             self.protected_branch(),
             protection.EXPECTED_CHECK,
         )
         self.assertTrue(report["passed"])
+        self.assertFalse(report["human_pr_approval_required"])
         self.assertEqual([], report["missing_or_invalid_controls"])
 
     def test_missing_required_check_blocks(self) -> None:
         data = self.protected_branch()
-        data["required_status_checks"] = {
-            "strict": True,
-            "checks": [],
-        }
+        data["required_status_checks"] = {"strict": True, "checks": []}
         report = protection.evaluate_protection(data, protection.EXPECTED_CHECK)
         self.assertFalse(report["passed"])
         self.assertIn(
@@ -97,16 +90,8 @@ class ReachableApprovalTests(unittest.TestCase):
             log_path = f"gates/{name}.log"
             artifacts.extend(
                 [
-                    {
-                        "path": result_path,
-                        "digest": result_digest,
-                        "producer": "test",
-                    },
-                    {
-                        "path": log_path,
-                        "digest": log_digest,
-                        "producer": "test",
-                    },
+                    {"path": result_path, "digest": result_digest, "producer": "test"},
+                    {"path": log_path, "digest": log_digest, "producer": "test"},
                 ]
             )
             commands.append(
@@ -136,7 +121,7 @@ class ReachableApprovalTests(unittest.TestCase):
                 "risk": "high",
                 "evidence_level": "E7",
                 "assurance_level": "T5",
-                "independence": ["I2", "I3"],
+                "independence": ["I1", "I2"],
                 "commands": commands,
                 "gates": {name: "passed" for name in required},
                 "gate_evidence": {
@@ -146,20 +131,23 @@ class ReachableApprovalTests(unittest.TestCase):
                 "unverified": [],
                 "residual_risks": [],
                 "conditions": [],
+                "change_budget": {"within_budget": True, "violations": []},
                 "decision": "BLOCKED",
-                "approved_by": ["independent-reviewer"],
-                "rollback": {
-                    "reference": "git revert",
-                    "tested": True,
-                },
+                "approved_by": [],
+                "rollback": {"reference": "git revert", "tested": True},
                 "review": {
-                    "builder": "builder-user",
-                    "auditor": "independent-reviewer",
+                    "builder": "builder-context-01",
+                    "auditor": "auditor-context-02",
                     "same_context": False,
-                    "human_review": {
+                    "audit_review": {
                         "required": True,
                         "completed": True,
-                        "mode": "targeted",
+                        "mode": "separate_ai_read_only",
+                    },
+                    "human_review": {
+                        "required": True,
+                        "completed": False,
+                        "mode": "owner_merge",
                     },
                 },
             }
@@ -174,13 +162,15 @@ class ReachableApprovalTests(unittest.TestCase):
         }
         return manifest
 
-    def test_complete_high_risk_evidence_is_derivably_approved(self) -> None:
+    def test_complete_high_risk_solo_evidence_is_ready_for_owner_merge(self) -> None:
         policy = decision_engine.parse_policy(ROOT / ".asi" / "policy.yml")
         result = decision_engine.evaluate_change(policy, self.complete_manifest())
         self.assertEqual("APPROVED", result["decision"])
         self.assertEqual("BLOCKED", result["claimed_decision"])
         self.assertEqual([], result["blockers"])
-        self.assertEqual("targeted_risk_review_completed", result["human_action"])
+        self.assertEqual("owner_authorize_merge", result["human_action"])
+        self.assertEqual("H1", result["authorization_level"])
+        self.assertFalse(result["automatic_approval_eligible"])
         self.assertFalse(result["line_by_line_review_required"])
 
 
