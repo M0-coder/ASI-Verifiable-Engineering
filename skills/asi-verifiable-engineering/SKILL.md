@@ -1,7 +1,7 @@
 ---
 name: asi-verifiable-engineering
-description: Audita, modifica, verifica y decide sobre cambios de software mediante ingeniería dirigida por evidencia, TDD, clasificación de riesgo, revisión independiente, CI reproducible, decisión derivada y rollback. Úsala al revisar código generado por IA, auditar repositorios, corregir defectos, evaluar pull requests o decidir si un commit puede integrarse sin depender de revisión línea por línea.
-compatibility: Requiere acceso de lectura al repositorio y, para verificar, acceso a sus herramientas de build, pruebas y CI. Los cambios de riesgo alto o crítico requieren aprobación humana dirigida por riesgo.
+description: Audita, modifica y decide sobre cambios de software mediante evidencia medible, TDD, riesgo, CI reproducible, auditoría en otro contexto de IA, observación operacional y rollback. Úsala para revisar código generado por IA, corregir repositorios o decidir si un commit puede integrarse sin leer cada línea.
+compatibility: Requiere acceso al repositorio y a sus comandos reales. En modo de un solo propietario, el constructor y el auditor deben usar contextos separados; el propietario conserva la autorización de cambios de riesgo alto y las acciones irreversibles.
 metadata:
   author: Eidon
   version: "0.1.0-draft.2"
@@ -13,308 +13,264 @@ metadata:
 
 ## Propósito
 
-Aplicar una cadena estricta de ingeniería verificable cuyo objetivo operativo sea evitar que el propietario tenga que revisar manualmente cada línea de código.
+Aplicar un protocolo ejecutable para que futuros chats puedan construir y verificar software sin obligar al propietario a revisar manualmente cada línea.
 
-El código no se aprueba porque una persona o una IA lo haya leído, explicado o considerado convincente. Solo puede aprobarse un commit específico cuando supera las puertas exigidas por su riesgo y un motor independiente deriva la decisión desde evidencia vinculada a ese commit.
+Un cambio no se aprueba porque una persona o una IA lo explique de forma convincente. Se evalúa el commit integrable exacto mediante comandos medidos, evidencia vinculada, auditoría separada, observación operacional y una decisión derivada por política.
 
-TDD dirige la construcción. La evidencia, la independencia, CI, la decisión derivada, la observación operativa y el rollback gobiernan la aprobación.
+TDD dirige la construcción. CI y los validadores verifican. Un contexto distinto audita. El propietario interviene solo donde la automatización no debe sustituir la autoridad humana.
 
 ## Activación
 
-Usa esta Skill cuando la tarea incluya cualquiera de estos objetivos:
+Activa esta Skill cuando la tarea implique cualquiera de estas acciones:
 
 - auditar un repositorio o pull request;
-- revisar código generado por ChatGPT u otra IA;
-- corregir un defecto o implementar comportamiento nuevo;
-- verificar compilación, pruebas, seguridad, arquitectura o CI;
-- decidir si un cambio está listo para integrar o desplegar;
-- crear o validar `.asi/policy.yml`;
-- producir un paquete de evidencia o una decisión formal;
-- configurar aprobación sin revisión línea por línea.
-
-No la uses como sustituto de los comandos reales del repositorio, CI, protección de ramas ni aprobación humana exigida por riesgo.
-
-## Inicio obligatorio
-
-Antes de modificar cualquier archivo:
-
-1. Comienza en modo solo lectura.
-2. Identifica repositorio, rama, commit exacto y estado del árbol.
-3. Localiza y valida `.asi/policy.yml`.
-4. Identifica runtime, SDK, gestor de paquetes, lockfiles, servicios y variables requeridas.
-5. Clasifica el riesgo inicial: bajo, medio, alto o crítico.
-6. Enumera puertas y comandos aplicables.
-7. Declara presupuesto de cambio, condición de aborto y rollback.
-8. Detente si falta autorización, política, evidencia básica o capacidad de reversión requerida.
-
-Lee [la doctrina principal](references/core-doctrine.md) para las reglas generales. Consulta los anexos solo cuando sean relevantes:
-
-- [Código generado por IA](references/annex-a-ai-code.md)
-- [Aseguramiento T0–T6](references/annex-b-assurance.md)
-- [Riesgo, independencia y decisión](references/annex-c-control-matrix.md)
-- [Policy-as-code](references/annex-d-policy-as-code.md)
-- [Aprobación sin revisión línea por línea](references/annex-e-automated-acceptance.md)
-
-## Principios no negociables
-
-- No confundas existencia con funcionamiento.
-- No declares ejecución que no realizaste.
-- No inventes herramientas, resultados ni certeza.
-- No corrijas un defecto sin reproducción, prueba fallida o evidencia alternativa justificada.
-- No apruebes un cambio sin protección razonable contra regresión.
-- No permitas que el constructor sea la única autoridad sobre su propio cambio.
-- Una puerta no ejecutada es `NO VERIFICADO`, nunca aprobada.
-- Una puerta fallida bloquea; no se convierte en advertencia por decisión del agente.
-- La explicación narrativa tiene menos autoridad que artefactos, CI y logs reproducibles.
-- La decisión escrita en un manifiesto es una reclamación; el motor debe derivarla nuevamente.
-- La revisión línea por línea no es una puerta predeterminada ni sustituye evidencia ejecutable.
-
-## Flujo de trabajo
-
-### Fase 1 — Preservación y línea base
-
-- Confirma modo solo lectura.
-- Captura commit, árbol, entorno y comandos canónicos.
-- Ejecuta la línea base sin autocorrección silenciosa.
-- Separa fallos preexistentes de los introducidos por el cambio.
-- Conserva comandos, códigos de salida y artefactos.
-
-### Fase 2 — Definición y TDD
-
-Para defectos o comportamiento nuevo:
-
-1. Define el comportamiento observable y sus criterios de aceptación.
-2. Reproduce el defecto o riesgo.
-3. Escribe o identifica una prueba que falle por la causa correcta.
-4. Aplica el cambio mínimo.
-5. Confirma que la prueba pasa.
-6. Refactoriza sin alterar comportamiento.
-7. Ejecuta regresión del módulo y controles globales aplicables.
-
-Si no es viable una prueba automatizada, registra por qué y qué evidencia alternativa se usará.
-
-### Fase 3 — Puertas de calidad
-
-Ejecuta, según la política y el riesgo:
-
-1. integridad del commit y diff;
-2. formato en modo comprobación;
-3. linting;
-4. type checking;
-5. compilación limpia;
-6. pruebas unitarias;
-7. pruebas de integración;
-8. pruebas instrumentadas o end-to-end;
-9. cobertura relevante;
-10. análisis de secretos y vulnerabilidades;
-11. validación de dependencias y lockfiles;
-12. reglas arquitectónicas;
-13. mutation testing, property testing, fuzzing, concurrencia, rendimiento o recuperación cuando el riesgo lo exija;
-14. reproducción en CI sobre el estado integrable.
-
-No uses un porcentaje global como sustituto de calidad. Verifica ramas críticas, invariantes, errores y casos límite.
-
-### Fase 4 — Prueba de honestidad
-
-Cuando una prueba nueva o modificada justifique el cambio, demuestra al menos una condición:
-
-- falla sobre el commit anterior y pasa sobre el nuevo;
-- al retirar temporalmente la corrección vuelve a fallar;
-- mutation testing demuestra que detecta una alteración relevante;
-- una prueba negativa independiente invalida el comportamiento defectuoso.
-
-Una prueba que pasa antes y después sin explicación válida no demuestra la corrección.
-
-### Fase 5 — Auditoría independiente
-
-El auditor debe comenzar en solo lectura y tratar la explicación del constructor como una hipótesis. Debe buscar requisitos omitidos, casos límite, permisos excesivos, errores silenciosos, mocks irreales, condiciones de carrera, pérdida de datos, regresiones, dependencias innecesarias y evidencia que no corresponda al commit.
-
-Si encuentra un fallo, no lo corrijas silenciosamente dentro de la auditoría. Registra el hallazgo, devuelve el cambio al constructor, exige un nuevo commit y repite la verificación.
-
-### Fase 6 — Decisión derivada
-
-No aceptes directamente el campo `decision` del manifiesto. Ejecuta:
-
-```bash
-python skills/asi-verifiable-engineering/scripts/validate_policy.py .asi/policy.yml
-python skills/asi-verifiable-engineering/scripts/validate_evidence.py .asi/evidence/manifest.json
-python skills/asi-verifiable-engineering/scripts/evaluate_change.py \
-  .asi/policy.yml \
-  .asi/evidence/manifest.json
-```
-
-El evaluador debe comprobar commit integrable, digests, presupuesto, puertas, evidencia por puerta, códigos de salida, honestidad de pruebas, independencia, niveles E/T/I, elementos no verificados y rollback.
-
-La reclamación escrita en el manifiesto no tiene autoridad para fabricar ni impedir una aprobación. El motor deriva el resultado desde la evidencia verificada y registra cualquier diferencia como nota trazable.
-
-### Fase 7 — Operación
-
-Para riesgo alto o crítico, verifica además:
-
-- despliegue gradual o entorno representativo;
-- observabilidad suficiente;
-- digest y procedencia del artefacto;
-- build once, promote the same artifact;
-- recuperación y rollback ensayados;
-- comportamiento posterior al despliegue;
-- protección efectiva de la rama canónica comprobada mediante API;
-- observación externa reciente vinculada al repositorio, head, revisor y digest exacto del paquete.
-
-Una revisión humana produce independencia I3, pero no eleva por sí sola a T5. La promoción a E7/T5 exige evidencia operacional verificable del mismo paquete en `chatgpt`, `codex` u `openai-api`.
-
-La confianza caduca cuando cambia código, dependencia, runtime, infraestructura, configuración, secretos, API externa, digest del paquete o condiciones operativas.
-
-## Escalas
-
-### Evidencia E0–E8
-
-- `E0`: declarada.
-- `E1`: presente.
-- `E2`: compilable.
-- `E3`: ejecutable.
-- `E4`: verificada contra criterios.
-- `E5`: reproducible.
-- `E6`: protegida por pruebas y CI.
-- `E7`: observada en operación.
-- `E8`: resiliente ante fallos evaluados.
-
-### Aseguramiento T0–T6
-
-- `T0`: propuesta no verificada.
-- `T1`: estructuralmente válida.
-- `T2`: funcionalmente probada.
-- `T3`: verificada independientemente.
-- `T4`: reproducible y protegida.
-- `T5`: observada en operación.
-- `T6`: resiliente.
-
-### Independencia I0–I3
-
-- `I0`: autorrevisión; no cuenta como independiente.
-- `I1`: revisión separada por IA.
-- `I2`: verificación determinista mediante herramientas y CI.
-- `I3`: revisión humana competente.
-
-## Mínimos por riesgo
-
-| Riesgo | Independencia mínima | Nivel T mínimo | Aprobación |
-|---|---|---|---|
-| Bajo | I1 + I2 | T4 | Automática con muestreo humano |
-| Medio | I1 + I2 | T4 | Automática solo con rollback y sin dudas relevantes |
-| Alto | I2 + I3 | T5 | Humana dirigida por riesgo |
-| Crítico | I2 + control dual humano | T6 cuando aplique | Prohibida la aprobación autónoma |
-
-El tamaño del diff no reduce el riesgo. Una línea que altere permisos, dinero, borrado, claves, migraciones, CI o infraestructura puede ser alta o crítica.
-
-## Aprobación sin revisión línea por línea
-
-La política estricta debe contener:
-
-```yaml
-automated_acceptance:
-  enabled: true
-  eligible_risks:
-    - low
-    - medium
-  line_by_line_review_default: false
-  require_all_required_gates_passed: true
-  require_no_unverified: true
-  require_no_residual_risks_for_automatic: true
-  require_test_honesty: true
-  require_change_budget: true
-  require_distinct_builder_auditor: true
-  require_rollback_tested: true
-  require_policy_digest: true
-  require_diff_digest: true
-```
-
-Riesgo bajo o medio puede aprobarse automáticamente cuando el motor deriva `APPROVED`, alcanza al menos T4/E6/I1+I2 y no quedan elementos no verificados, riesgos residuales, condiciones, puertas fallidas ni archivos inesperados.
-
-Riesgo alto o crítico exige revisión humana dirigida por riesgo, no necesariamente lectura exhaustiva. La persona revisa intención, arquitectura, permisos, datos, dinero, secretos, irreversibilidad, excepciones y contención. El modo es `targeted` o `targeted_dual`.
-
-La lectura línea por línea queda como herramienta forense excepcional ante evidencia manipulada, código masivo no acotado, ofuscación, incidentes o propiedades críticas sin prueba adecuada. Nunca aprueba por sí sola.
-
-## Acciones prohibidas sin autorización explícita
-
-- borrar datos o archivos relevantes;
-- ejecutar migraciones irreversibles;
-- cambiar producción;
-- exponer o rotar secretos;
-- modificar permisos sensibles;
-- mover dinero o cambiar facturación;
-- publicar paquetes o releases;
-- hacer merge a ramas protegidas;
-- desactivar pruebas, análisis, políticas o seguridad;
-- aceptar vulnerabilidades críticas;
-- reescribir arquitectura ampliamente.
-
-## Falsos verdes prohibidos
-
-No obtengas verde mediante eliminación o desactivación de pruebas, aserciones debilitadas, retries indiscriminados, timeouts inflados, errores convertidos en warnings, excepciones descartadas, exclusiones de cobertura, snapshots aceptados sin inspección o afirmaciones no demostradas de que el fallo era preexistente.
-
-Modificar CI, pruebas, política o umbrales requiere un cambio separado y una aprobación superior.
-
-## Condiciones de detención
-
-Detente y escala cuando:
-
-- el alcance exceda lo autorizado;
-- aparezcan archivos o dependencias no previstas;
-- exista riesgo de pérdida o corrupción de datos;
-- se encuentre un secreto;
-- falte rollback para riesgo alto;
-- CI y local se contradigan;
-- la evidencia no corresponda al commit;
-- las pruebas pasen por la razón equivocada;
-- el constructor y auditor no sean independientes;
-- la incertidumbre sea mayor que la capacidad de contención.
-
-Detenerse significa preservar, registrar evidencia y proponer el siguiente paso seguro; no significa ocultar ni abandonar el hallazgo.
-
-## Paquete de evidencia
-
-Usa [el manifiesto de evidencia](assets/evidence-manifest.example.json), [el contrato de observación objetivo](assets/target-observation.example.json) y [la plantilla de auditoría](assets/audit-report.md). Como mínimo registra:
-
-- repositorio, base, commit evaluado y commit integrable;
-- digest de política y diff;
-- política y entorno;
-- riesgo, niveles E, T e I;
-- archivos modificados y presupuesto;
-- comandos exactos y códigos de salida;
-- estado y artefacto de cada puerta;
-- digests de artefactos;
-- evidencia de honestidad de las pruebas;
-- identidades separadas de constructor y auditor;
-- protección efectiva de la rama canónica;
-- observación operacional vinculada al head y al paquete cuando se reclame E7/T5;
-- pruebas, seguridad y controles omitidos;
-- elementos no verificados;
-- riesgos residuales;
+- corregir un defecto o implementar una función;
+- revisar código generado por IA;
+- validar arquitectura, pruebas, CI, seguridad o reproducibilidad;
+- decidir si un cambio puede integrarse;
+- producir o verificar un paquete de evidencia;
+- operar con un único propietario que delega trabajo a varios chats.
+
+## Archivos normativos
+
+Lee según la tarea:
+
+- doctrina general: [references/core-doctrine.md](references/core-doctrine.md);
+- modo de un solo propietario: [references/solo-operator-mode.md](references/solo-operator-mode.md);
+- código generado por IA: [references/annex-a-ai-code.md](references/annex-a-ai-code.md);
+- niveles E/T/I: [references/annex-b-assurance.md](references/annex-b-assurance.md);
+- riesgo y controles: [references/annex-c-control-matrix.md](references/annex-c-control-matrix.md);
+- policy-as-code: [references/annex-d-policy-as-code.md](references/annex-d-policy-as-code.md);
+- aceptación automatizada: [references/annex-e-automated-acceptance.md](references/annex-e-automated-acceptance.md).
+
+La regla de Solo-Operator Mode prevalece sobre cualquier redacción heredada que equipare automáticamente independencia con otra cuenta humana. I3 sigue reservado para verificación humana externa o institucional y para cambios críticos.
+
+## Directiva principal
+
+1. Empieza en modo solo lectura.
+2. Fija repositorio, rama, base, head, commit integrable, entorno y política.
+3. Separa existencia, ejecución y verificación.
+4. No afirmes que algo funciona sin ejecutar su comando real.
+5. No uses un manifiesto de ejemplo como evidencia real.
+6. No conviertas fallos o estados `NO VERIFICADO` en advertencias narrativas.
+7. No modifiques código durante una auditoría declarada como independiente.
+8. No reclames autorización del propietario.
+9. No hagas merge mientras el motor derive `BLOCKED` o `REJECTED`.
+
+## Roles en Solo-Operator Mode
+
+### Constructor
+
+El chat constructor puede inspeccionar y modificar. Antes de intervenir debe declarar:
+
+- objetivo y fuera de alcance;
+- archivos esperados;
+- riesgo inicial;
+- pruebas y puertas aplicables;
+- condiciones de parada;
 - rollback;
-- decisión reclamada, decisión derivada y expiración de confianza.
+- un `builder_context_id` estable y no secreto.
 
-## Decisión final
+El constructor puede producir evidencia, pero no puede emitir la atestación de auditoría, inventar un contexto auditor ni afirmar que el propietario autorizó el merge.
 
-Devuelve exactamente una decisión principal derivada:
+### Auditor
 
-### APROBADO
+El auditor debe ejecutarse en otra conversación o contexto con un `auditor_context_id` diferente.
 
-Todas las puertas exigidas pasaron y no quedan incertidumbres incompatibles con el riesgo.
+Debe:
 
-### APROBADO CONDICIONALMENTE
+- iniciar en solo lectura;
+- auditar el head exacto;
+- comprobar identidad Git y presupuesto;
+- reproducir o inspeccionar las puertas requeridas;
+- revisar intención, arquitectura, permisos, seguridad, observabilidad y rollback según riesgo;
+- registrar hallazgos y límites;
+- mantener `write_actions: []`;
+- publicar una atestación JSON enlazada por URL y SHA-256.
 
-Solo para riesgo bajo o medio. Incluye condición, propietario, control compensatorio y fecha de expiración.
+Si encuentra un defecto, bloquea y termina la auditoría. La corrección vuelve al constructor o a un nuevo contexto de reparación.
 
-### BLOQUEADO
+### CI
 
-Existe una puerta fallida, evidencia insuficiente, riesgo no mitigado o falta de autorización.
+CI es el árbitro técnico. Debe:
 
-### RECHAZADO
+- resolver comandos desde la política;
+- ejecutarlos sin sustituirlos por nombres narrativos;
+- medir argv, timestamps, duración, exit code, logs y digests;
+- vincular política, diff, artefactos y commit;
+- comprobar que constructor y auditor usan contextos distintos;
+- derivar la decisión sin confiar en la decisión escrita por el constructor.
 
-El enfoque es incorrecto, excede el riesgo aceptable o requiere rediseño.
+### Propietario
 
-Comienza la salida con decisión, commit, riesgo, niveles E/T/I, elegibilidad automática, bloqueadores, elementos no verificados y acción humana requerida. No uses expresiones como “casi listo”, “debe funcionar” o “todo correcto”.
+El propietario no necesita leer cada línea. Conserva estas decisiones:
 
-## Criterio de terminado
+- autorizar el merge de riesgo alto cuando el motor derive `APPROVED`;
+- aprobar cambios de política y excepciones;
+- controlar secretos, dinero, producción y operaciones irreversibles;
+- obtener participación humana externa para riesgo crítico.
 
-Código escrito no significa terminado. Una tarea termina cuando el comportamiento fue definido, demostrado, reproducido, protegido, revisado según riesgo, documentado, asociado a rollback y aceptado por el motor mediante evidencia.
+## Independencia y autorización
+
+No mezcles independencia técnica con autorización humana.
+
+- `I0`: autoevaluación del constructor; no independiente.
+- `I1`: auditoría en otro contexto de IA, solo lectura y ligada al commit.
+- `I2`: herramientas deterministas y CI reproducible.
+- `I3`: verificador humano externo o institucional.
+
+- `H0`: sin autorización humana después de aprobación automática elegible.
+- `H1`: autorización del propietario mediante merge manual del head aprobado.
+- `H2`: autorización humana dual para cambios críticos.
+
+La misma cuenta de GitHub puede publicar la evidencia del constructor y del auditor. La independencia se demuestra por contexto distinto, modo solo lectura, cero escrituras, evidencia externa, commit exacto y verificación de CI.
+
+## Clasificación de riesgo
+
+Clasifica antes de modificar y vuelve a clasificar después del diff.
+
+### Bajo
+
+Cambios locales, reversibles y sin impacto en permisos, datos sensibles, dependencias, CI o contratos externos.
+
+Mínimo: E6, T4, I1+I2. Puede usar H0 si la política lo permite.
+
+### Medio
+
+Cambios con impacto funcional acotado, integraciones internas o superficie moderada.
+
+Mínimo: E6, T4, I1+I2. Puede usar H0 si no quedan riesgos residuales incompatibles.
+
+### Alto
+
+Autenticación, permisos, datos, dependencias, workflows, política, infraestructura, migraciones, publicación o controles de esta Skill.
+
+Mínimo: E7, T5, I1+I2 y H1. El motor puede derivar `APPROVED`; el propietario decide el merge.
+
+### Crítico
+
+Producción, secretos, dinero, acciones destructivas, acceso privilegiado o propiedades cuya falla cause daño grave.
+
+Mínimo: E8, T6, I1+I2+I3 y H2. Un operador solo no puede satisfacerlo sin una persona externa.
+
+## Flujo de construcción
+
+1. Captura baseline y reproduce el estado previo.
+2. Define presupuesto de cambio y `builder_context_id`.
+3. Escribe o adapta pruebas que fallen por la razón esperada.
+4. Implementa el cambio mínimo.
+5. Refactoriza sin cambiar comportamiento.
+6. Ejecuta puertas rápidas.
+7. Ejecuta la cadena completa requerida por riesgo.
+8. Genera evidencia ligada al commit integrable.
+9. Entrega el head al contexto auditor.
+10. No declares aprobación; espera la decisión derivada.
+
+## Flujo de auditoría separada
+
+1. Abre una conversación nueva.
+2. Asigna un `auditor_context_id` distinto.
+3. Ordena explícitamente solo lectura y prohibición de corregir.
+4. Proporciona repositorio, PR, base, head, política y artefacto CI.
+5. Verifica el commit exacto y la integridad de la evidencia.
+6. Ejecuta una observación en `chatgpt`, `codex` u `openai-api` cuando T5 sea requerido.
+7. Genera la atestación basada en [assets/target-observation.example.json](assets/target-observation.example.json).
+8. Publica un comentario de revisión con:
+
+```text
+ASI-SOLO-AUDIT-V1
+ASI-AUDIT-EVIDENCE-URL: https://raw.githubusercontent.com/...
+ASI-AUDIT-EVIDENCE-SHA256: sha256:<digest>
+```
+
+9. CI descarga, verifica y aplica la atestación.
+
+## Puertas mínimas
+
+Usa los comandos exactos declarados por la política del repositorio. El perfil estricto incluye:
+
+- identidad Git y presupuesto de cambio;
+- protección efectiva de la rama canónica;
+- formato, lint y tipos;
+- build y empaquetado reproducible;
+- pruebas unitarias, integración y honestidad adversarial;
+- secretos y cadena de suministro;
+- rollback ensayado;
+- auditoría de contexto separado;
+- observación del paquete exacto en el entorno objetivo;
+- recomputación criptográfica de vínculos;
+- decisión derivada.
+
+Una etapa de workflow marcada como `success` por `continue-on-error` no equivale a una puerta aprobada. El estado medido dentro del manifiesto es la fuente de verdad.
+
+## Evidencia
+
+Distingue:
+
+- E0–E4: afirmaciones, archivos o salidas parciales;
+- E5: ejecución automatizada incompleta o sin todos los vínculos;
+- E6: pruebas reproducibles y evidencia técnica ligada al commit;
+- E7: observación operacional del paquete exacto;
+- E8: evidencia operacional crítica independiente.
+
+El manifiesto debe incluir como mínimo identidad Git, política, diff, ambiente, comandos, códigos de salida, duraciones, logs, digests, presupuesto, puertas, rollback, niveles E/T/I, roles, incertidumbres y decisión reclamada.
+
+La decisión reclamada no tiene autoridad. El motor deriva la decisión efectiva.
+
+## Decisiones permitidas
+
+- `APPROVED`: todas las puertas aplicables pasan y no quedan bloqueos incompatibles.
+- `CONDITIONAL`: la política permite condiciones explícitas y riesgos residuales aceptables.
+- `BLOCKED`: falta evidencia, una puerta falla o falta autorización requerida.
+- `REJECTED`: el cambio contradice requisitos o el riesgo no es aceptable.
+
+En informes humanos usa también: APROBADO, APROBADO CONDICIONALMENTE, BLOQUEADO y RECHAZADO.
+
+`NO VERIFICADO` es un estado de evidencia, no una decisión final.
+
+## Revisión humana dirigida
+
+La revisión línea por línea no es el control normal.
+
+Para riesgo alto, el propietario revisa el resultado de la evidencia, bloqueadores, limitaciones, rollback y alcance antes de decidir H1. No necesita inspeccionar mecánicamente todo el diff.
+
+Activa revisión forense detallada únicamente ante:
+
+- digest o vínculo contradictorio;
+- rutas prohibidas o archivos inesperados;
+- binarios, código generado u ofuscación no explicada;
+- cambio no acotado;
+- incidente o sospecha de manipulación;
+- propiedad crítica sin prueba ejecutable.
+
+## Condiciones de parada
+
+Detén y bloquea cuando:
+
+- no puedas fijar el commit evaluado;
+- falte un comando real;
+- una puerta requerida falle;
+- el presupuesto sea violado;
+- el auditor use el mismo contexto que el constructor;
+- la atestación declare escrituras;
+- la observación no corresponda al paquete exacto;
+- el agente intente reclamar H1 o H2;
+- haya secretos, producción o acciones irreversibles sin autorización;
+- exista contradicción material que no pueda resolverse con evidencia.
+
+## Salida obligatoria
+
+Reporta:
+
+1. alcance y riesgo;
+2. base, head y commit integrable;
+3. comandos ejecutados y resultados;
+4. puertas aprobadas, fallidas y no verificadas;
+5. E/T/I alcanzados;
+6. nivel H requerido;
+7. hallazgos y limitaciones;
+8. rollback;
+9. decisión derivada;
+10. siguiente acción exacta.
+
+Nunca afirmes que un cambio fue aprobado solo porque CI técnico esté verde. Para riesgo alto faltan I1, E7/T5 y la decisión H1 del propietario; para riesgo crítico faltan además I3 y H2.
