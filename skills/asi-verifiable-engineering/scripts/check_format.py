@@ -46,7 +46,11 @@ def check_file(root: Path, path: Path) -> list[dict[str, object]]:
         findings.append({"path": relative, "reason": "missing_final_newline"})
 
     for line_number, line in enumerate(text.splitlines(), start=1):
-        if line.endswith((" ", "\t")):
+        trailing_spaces = len(line) - len(line.rstrip(" "))
+        intentional_markdown_break = (
+            path.suffix.lower() == ".md" and trailing_spaces == 2
+        )
+        if (line.endswith("\t") or trailing_spaces > 0) and not intentional_markdown_break:
             findings.append(
                 {
                     "path": relative,
