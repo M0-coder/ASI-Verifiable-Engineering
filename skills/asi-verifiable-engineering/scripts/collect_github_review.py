@@ -114,21 +114,23 @@ def validate_observation(
     except ValueError:
         errors.append("invalid_executed_at")
 
-    normalized = {
-        "observation_version": raw.get("observation_version"),
-        "repository": raw.get("repository"),
-        "head_commit": raw.get("head_commit"),
-        "reviewer": raw.get("reviewer"),
-        "target_environment": target,
-        "package_digest": package_digest,
-        "result": raw.get("result"),
-        "executed_at": executed_at,
-        "checks": checks,
-        "limitations": raw.get("limitations", []),
-        "evidence_url": evidence_url,
-        "evidence_digest": evidence_digest,
-    }
-    return normalized, errors
+    return (
+        {
+            "observation_version": raw.get("observation_version"),
+            "repository": raw.get("repository"),
+            "head_commit": raw.get("head_commit"),
+            "reviewer": raw.get("reviewer"),
+            "target_environment": target,
+            "package_digest": package_digest,
+            "result": raw.get("result"),
+            "executed_at": executed_at,
+            "checks": checks,
+            "limitations": raw.get("limitations", []),
+            "evidence_url": evidence_url,
+            "evidence_digest": evidence_digest,
+        },
+        errors,
+    )
 
 
 def evaluate_reviews(
@@ -146,7 +148,8 @@ def evaluate_reviews(
         user = review.get("user")
         if not isinstance(user, dict):
             continue
-        login = user.get("login")
+        login_value = user.get("login")
+        login = login_value if isinstance(login_value, str) else ""
         reasons: list[str] = []
         if review.get("state") != "APPROVED":
             reasons.append("latest_decisive_state_is_not_approved")
@@ -154,12 +157,15 @@ def evaluate_reviews(
             reasons.append("review_is_stale_for_current_head")
         if user.get("type") != "User":
             reasons.append("reviewer_is_not_a_human_user_account")
+        if not login:
+            reasons.append("reviewer_login_is_missing")
         if login == builder:
             reasons.append("reviewer_is_the_builder")
         if review.get("author_association") not in TRUSTED_ASSOCIATIONS:
             reasons.append("reviewer_is_not_a_trusted_repository_associate")
-        body = review.get("body")
-        if not isinstance(body, str) or REVIEW_MARKER not in body:
+        body_value = review.get("body")
+        body = body_value if isinstance(body_value, str) else ""
+        if REVIEW_MARKER not in body:
             reasons.append("targeted_review_marker_is_missing")
         if not review.get("submitted_at"):
             reasons.append("submitted_at_is_missing")
@@ -179,8 +185,7 @@ def evaluate_reviews(
             rejected.append(normalized)
             continue
 
-        approval = normalized
-        if isinstance(body, str) and OBSERVATION_MARKER in body:
+        if OBSERVATION_MARKER in body:
             url_match = OBSERVATION_URL.search(body)
             digest_match = OBSERVATION_DIGEST.search(body)
             observation_errors: list[str] = []
@@ -188,7 +193,9 @@ def evaluate_reviews(
                 observation_errors.append("target_evidence_url_is_missing")
             if digest_match is None:
                 observation_errors.append("target_evidence_digest_is_missing")
-            if not observation_errors and isinstance(login, str):
+            if not observation_errors:
+                assert url_match is not None
+                assert digest_match is not None
                 evidence_url = url_match.group(1)
                 evidence_digest = digest_match.group(1)
                 try:
@@ -203,7 +210,7 @@ def evaluate_reviews(
                     )
                     observation_errors.extend(validation_errors)
                     if not validation_errors:
-                        approval["target_observation"] = observation
+                        normalized["target_observation"] = observation
                         observations.append(observation)
                 except (
                     OSError,
@@ -215,8 +222,8 @@ def evaluate_reviews(
                 ) as exc:
                     observation_errors.append(f"target_evidence_error:{exc}")
             if observation_errors:
-                approval["target_observation_errors"] = observation_errors
-        approvals.append(approval)
+                normalized["target_observation_errors"] = observation_errors
+        approvals.append(normalized)
 
     return {
         "attestation_version": 2,
