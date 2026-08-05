@@ -6,6 +6,11 @@ doctrine:
   skill_version: "0.1.0-draft.2"
   source: "skills/asi-verifiable-engineering/SKILL.md"
 
+governance:
+  operator_mode: solo
+  high_risk_authorization: owner_merge
+  critical_risk_authorization: dual_human
+
 repository:
   default_risk: high
   policy_owner: "Eidon"
@@ -37,7 +42,7 @@ commands:
   dependency_scan: "python skills/asi-verifiable-engineering/scripts/scan_supply_chain.py ."
   test_honesty: "python -m unittest tests.test_adversarial_controls -v"
   rollback_check: "python skills/asi-verifiable-engineering/scripts/verify_source_rollback.py"
-  independent_audit: "python skills/asi-verifiable-engineering/scripts/collect_github_review.py --require-review"
+  independent_audit: "python skills/asi-verifiable-engineering/scripts/collect_github_review.py --require-audit"
   target_environment_observation: "python skills/asi-verifiable-engineering/scripts/collect_github_review.py --require-observation"
 
 required_gates:
@@ -86,11 +91,12 @@ assurance:
   high:
     minimum_t: T5
     independence:
+      - I1
       - I2
-      - I3
   critical:
     minimum_t: T6
     independence:
+      - I1
       - I2
       - I3
     dual_human_approval: true
@@ -129,6 +135,8 @@ deployment:
 agent_permissions:
   direct_push_protected_branch: false
   self_approve: false
+  forge_audit_attestation: false
+  claim_owner_authorization: false
   modify_policy_in_same_change: false
   disable_required_gate: false
   access_production_secrets: false
