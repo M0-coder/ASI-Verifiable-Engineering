@@ -14,10 +14,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate:
-    name: Validate package, policy, evidence, and decision
+  verify:
+    name: Verify measured gates and derive decision
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONPYCACHEPREFIX: /tmp/asi-pycache
@@ -35,119 +35,190 @@ jobs:
           python-version: "3.12"
           cache: ""
 
-      - name: Prepare evidence directory
+      - name: Prepare evidence and commit identity
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
         run: |
           set -euo pipefail
           evidence_dir="$RUNNER_TEMP/asi-evidence"
-          printf 'EVIDENCE_DIR=%s\n' "$evidence_dir" >> "$GITHUB_ENV"
           mkdir -p "$evidence_dir"
-
-      - name: Record baseline
-        run: |
-          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            base_sha="$PR_BASE_SHA"
+            head_sha="$PR_HEAD_SHA"
+            branch="$PR_BRANCH"
+            builder="$PR_AUTHOR"
+          else
+            base_sha="$PUSH_BASE_SHA"
+            head_sha="$GITHUB_SHA"
+            branch="$GITHUB_REF_NAME"
+            builder="$GITHUB_ACTOR"
+          fi
+          printf 'EVIDENCE_DIR=%s\n' "$evidence_dir" >> "$GITHUB_ENV"
+          printf 'ASI_BASE_SHA=%s\n' "$base_sha" >> "$GITHUB_ENV"
+          printf 'ASI_HEAD_SHA=%s\n' "$head_sha" >> "$GITHUB_ENV"
+          printf 'ASI_EVALUATED_SHA=%s\n' "$GITHUB_SHA" >> "$GITHUB_ENV"
+          printf 'ASI_BRANCH=%s\n' "$branch" >> "$GITHUB_ENV"
+          printf 'ASI_BUILDER=%s\n' "$builder" >> "$GITHUB_ENV"
           printf 'commit=%s\n' "$GITHUB_SHA"
           python --version
           git status --short
 
-      - name: Validate Agent Skill package
-        run: python tools/validate_skill_package.py skills/asi-verifiable-engineering
+      - name: Install pinned CI toolchain
+        continue-on-error: true
+        run: >-
+          python skills/asi-verifiable-engineering/scripts/run_gate.py
+          --name install
+          --output-dir "$EVIDENCE_DIR"
+          --policy .asi/policy.yml
+          --policy-key install
 
-      - name: Validate repository policy
-        run: python skills/asi-verifiable-engineering/scripts/validate_policy.py .asi/policy.yml
+      - name: Integrity and change-budget gate
+        continue-on-error: true
+        run: >-
+          python skills/asi-verifiable-engineering/scripts/run_gate.py
+          --name integrity
+          --output-dir "$EVIDENCE_DIR"
+          --policy .asi/policy.yml
+          --policy-key integrity
 
-      - name: Validate example evidence manifest
-        run: python skills/asi-verifiable-engineering/scripts/validate_evidence.py skills/asi-verifiable-engineering/assets/evidence-manifest.example.json
+      - name: Format gate
+        continue-on-error: true
+        run: >-
+          python skills/asi-verifiable-engineering/scripts/run_gate.py
+          --name format_check
+          --output-dir "$EVIDENCE_DIR"
+          --policy .asi/policy.yml
+          --policy-key format_check
 
-      - name: Derive reference decision from policy and evidence
-        run: python skills/asi-verifiable-engineering/scripts/evaluate_change.py .asi/policy.yml skills/asi-verifiable-engineering/assets/evidence-manifest.example.json --expect APPROVED
+      - name: Lint gate
+        continue-on-error: true
+        run: >-
+          python skills/asi-verifiable-engineering/scripts/run_gate.py
+          --name lint
+          --output-dir "$EVIDENCE_DIR"
+          --policy .asi/policy.yml
+          --policy-key lint
 
-      - name: Validate JSON syntax
-        run: python -m json.tool skills/asi-verifiable-engineering/assets/evidence-manifest.example.json > /dev/null
+      - name: Type-check gate
+        continue-on-error: true
+        run: >-
+          python skills/asi-verifiable-engineering/scripts/run_gate.py
+          --name typecheck
+          --output-dir "$EVIDENCE_DIR"
+          --policy .asi/policy.yml
+          --policy-key typecheck
 
-      - name: Compile Python sources
-        run: python -m compileall -q tools tests skills/asi-verifiable-engineering/scripts
+      - name: Build and package gate
+        continue-on-error: true
+        run: >-
+          python skills/asi-verifiable-engineering/scripts/run_gate.py
+          --name build
+          --output-dir "$EVIDENCE_DIR"
+          --policy .asi/policy.yml
+          --policy-key build
 
-      - name: Run regression and adversarial tests
-        run: |
-          set -euo pipefail
-          python -m unittest discover -s tests -v 2>&1 | tee "$EVIDENCE_DIR/tests.log"
+      - name: Unit and regression gate
+        continue-on-error: true
+        run: >-
+          python skills/asi-verifiable-engineering/scripts/run_gate.py
+          --name unit_tests
+          --output-dir "$EVIDENCE_DIR"
+          --policy .asi/policy.yml
+          --policy-key unit_tests
 
-      - name: Secret scan
-        run: python tools/validate_skill_package.py skills/asi-verifiable-engineering
+      - name: Integration evidence gate
+        continue-on-error: true
+        run: >-
+          python skills/asi-verifiable-engineering/scripts/run_gate.py
+          --name integration_tests
+          --output-dir "$EVIDENCE_DIR"
+          --policy .asi/policy.yml
+          --policy-key integration_tests
 
-      - name: Dependency and action pin scan
-        run: python tools/validate_skill_package.py skills/asi-verifiable-engineering
+      - name: Dedicated secret-scan gate
+        continue-on-error: true
+        run: >-
+          python skills/asi-verifiable-engineering/scripts/run_gate.py
+          --name secret_scan
+          --output-dir "$EVIDENCE_DIR"
+          --policy .asi/policy.yml
+          --policy-key secret_scan
 
-      - name: Generate actual PR evidence manifest
-        if: github.event_name == 'pull_request'
+      - name: Supply-chain and action-pin gate
+        continue-on-error: true
+        run: >-
+          python skills/asi-verifiable-engineering/scripts/run_gate.py
+          --name dependency_scan
+          --output-dir "$EVIDENCE_DIR"
+          --policy .asi/policy.yml
+          --policy-key dependency_scan
+
+      - name: Adversarial test-honesty control
+        continue-on-error: true
+        run: >-
+          python skills/asi-verifiable-engineering/scripts/run_gate.py
+          --name test_honesty
+          --output-dir "$EVIDENCE_DIR"
+          --policy .asi/policy.yml
+          --policy-key test_honesty
+
+      - name: Generate actual commit-bound evidence
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          budget_file=".asi/evidence-inputs/pr-${PR_NUMBER}-change-budget.json"
           python skills/asi-verifiable-engineering/scripts/generate_ci_evidence.py \
             --repository "$GITHUB_REPOSITORY" \
-            --branch "$PR_BRANCH" \
-            --base-commit "$BASE_SHA" \
-            --head-commit "$HEAD_SHA" \
-            --evaluated-commit "$GITHUB_SHA" \
+            --branch "$ASI_BRANCH" \
+            --base-commit "$ASI_BASE_SHA" \
+            --head-commit "$ASI_HEAD_SHA" \
+            --evaluated-commit "$ASI_EVALUATED_SHA" \
             --policy .asi/policy.yml \
-            --budget "$budget_file" \
+            --budget .asi/change-budget.json \
             --output-dir "$EVIDENCE_DIR" \
-            --builder "$PR_AUTHOR" \
+            --repo-root . \
+            --builder "$ASI_BUILDER" \
             --workflow-run "$RUN_URL" \
             --risk high \
             --skill-version "$(cat VERSION)" \
             --doctrine-version "1.2" \
-            --tests-log "$EVIDENCE_DIR/tests.log" \
-            --passed-gate integrity \
-            --passed-gate format_check \
-            --passed-gate lint \
-            --passed-gate typecheck \
-            --passed-gate build \
-            --passed-gate unit_tests \
-            --passed-gate integration_tests \
-            --passed-gate secret_scan \
-            --passed-gate dependency_scan \
             --unverified "Independent targeted human review is pending." \
-            --unverified "Installation in Codex or ChatGPT is pending." \
+            --unverified "Installation in the target agent environment is pending." \
             --unverified "Branch protection and required checks are not configured." \
             > "$EVIDENCE_DIR/generated-manifest-output.json"
-          python -m json.tool "$EVIDENCE_DIR/manifest.json" > /dev/null
 
-      - name: Enforce actual PR decision
-        if: github.event_name == 'pull_request'
+      - name: Recompute and validate evidence bindings
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          python skills/asi-verifiable-engineering/scripts/validate_evidence.py \
+            "$EVIDENCE_DIR/manifest.json" \
+            --evidence-dir "$EVIDENCE_DIR" \
+            --policy .asi/policy.yml \
+            --repo-root . \
+            2>&1 | tee "$EVIDENCE_DIR/binding-validation.log"
+
+      - name: Derive actual approval decision
+        continue-on-error: true
         run: |
           set +e
           python skills/asi-verifiable-engineering/scripts/evaluate_change.py \
             .asi/policy.yml \
             "$EVIDENCE_DIR/manifest.json" \
+            --evidence-dir "$EVIDENCE_DIR" \
+            --repo-root . \
             > "$EVIDENCE_DIR/decision.json"
-          evaluation_status=$?
-          set -e
-          python - "$EVIDENCE_DIR/decision.json" <<'PY'
-          import json
-          import sys
-          from pathlib import Path
-
-          result = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-          if result["decision"] != "BLOCKED":
-              raise SystemExit(
-                  "Bootstrap PR must remain BLOCKED until independent high-risk review exists."
-              )
-          if result["line_by_line_review_required"] is not False:
-              raise SystemExit("Line-by-line review must not become the default gate.")
-          print(json.dumps(result, indent=2, sort_keys=True))
-          PY
-          exit "$evaluation_status"
+          status=$?
+          printf '%s\n' "$status" > "$EVIDENCE_DIR/decision-exit-code.txt"
+          cat "$EVIDENCE_DIR/decision.json"
+          exit 0
 
       - name: Upload actual CI evidence
-        if: always() && github.event_name == 'pull_request'
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: asi-evidence-${{ github.run_id }}
@@ -160,3 +231,30 @@ jobs:
         run: |
           set -euo pipefail
           test -z "$(git status --porcelain)"
+
+      - name: Enforce technical gates and derived approval
+        if: always()
+        run: |
+          python - "$EVIDENCE_DIR/manifest.json" "$EVIDENCE_DIR/decision.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          decision = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          technical_failures = sorted(
+              name
+              for name, state in manifest["gates"].items()
+              if name != "independent_audit" and state != "passed"
+          )
+          if technical_failures:
+              raise SystemExit(
+                  "Technical gates failed or were not verified: "
+                  + ", ".join(technical_failures)
+              )
+          if decision["decision"] != "APPROVED":
+              raise SystemExit(
+                  "Commit remains blocked by derived decision: "
+                  + "; ".join(decision["blockers"])
+              )
+          PY
