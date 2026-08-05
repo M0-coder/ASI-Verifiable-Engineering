@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scan dependency metadata and GitHub Actions references for unsafe supply-chain state."""
+"""Scan dependency metadata and Actions references for unsafe supply-chain state."""
 
 from __future__ import annotations
 
@@ -10,6 +10,9 @@ from pathlib import Path
 
 ACTION_SHA = re.compile(r"^[0-9a-f]{40}$")
 USES = re.compile(r"^\s*uses:\s*([^\s#]+)", re.MULTILINE)
+EXACT_REQUIREMENT = re.compile(
+    r"^[A-Za-z0-9_.-]+(?:\[[A-Za-z0-9_,.-]+\])?==[^\s;]+(?:\s*;\s*.+)?$"
+)
 
 DEPENDENCY_MANIFESTS = {
     "pyproject.toml": {"uv.lock", "poetry.lock", "Pipfile.lock"},
@@ -20,6 +23,34 @@ DEPENDENCY_MANIFESTS = {
     "build.gradle": {"gradle.lockfile"},
     "build.gradle.kts": {"gradle.lockfile"},
 }
+
+
+def _scan_requirements_lock(path: Path) -> list[dict[str, object]]:
+    violations: list[dict[str, object]] = []
+    for line_number, raw in enumerate(
+        path.read_text(encoding="utf-8").splitlines(),
+        start=1,
+    ):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith(("-", "http://", "https://", "git+")):
+            violations.append(
+                {
+                    "path": path.name,
+                    "line": line_number,
+                    "reason": "non_registry_or_option_requirement",
+                }
+            )
+        elif not EXACT_REQUIREMENT.fullmatch(line):
+            violations.append(
+                {
+                    "path": path.name,
+                    "line": line_number,
+                    "reason": "requirement_not_exactly_pinned",
+                }
+            )
+    return violations
 
 
 def scan(root: Path) -> dict[str, object]:
@@ -70,19 +101,36 @@ def scan(root: Path) -> dict[str, object]:
                 }
             )
 
+    lock_file = root / "requirements-ci.lock"
+    lock_violations = (
+        _scan_requirements_lock(lock_file)
+        if lock_file.is_file()
+        else [
+            {
+                "path": "requirements-ci.lock",
+                "line": 0,
+                "reason": "required_ci_lock_missing",
+            }
+        ]
+    )
+
     violations: list[str] = []
     if unpinned_actions:
         violations.append("unpinned_actions")
     if missing_lockfiles:
         violations.append("dependency_manifest_without_lockfile")
+    if lock_violations:
+        violations.append("invalid_ci_dependency_lock")
 
     return {
-        "scan_version": 1,
+        "scan_version": 2,
         "workflow_files": [str(path.relative_to(root)) for path in workflow_files],
         "action_references": action_references,
         "unpinned_actions": unpinned_actions,
         "dependency_manifests": sorted(manifests),
         "missing_lockfiles": missing_lockfiles,
+        "ci_lock": str(lock_file.relative_to(root)) if lock_file.is_file() else None,
+        "ci_lock_violations": lock_violations,
         "violations": violations,
         "passed": not violations,
     }
