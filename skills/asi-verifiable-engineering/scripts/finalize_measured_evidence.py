@@ -41,9 +41,37 @@ def _measured_gate(manifest: dict[str, Any], name: str) -> dict[str, Any]:
     return item
 
 
-def finalize(manifest: dict[str, Any]) -> dict[str, Any]:
+def _load_json_log(evidence_dir: Path, gate: dict[str, Any]) -> dict[str, Any]:
+    relative = gate.get("log_artifact")
+    if not isinstance(relative, str) or not relative:
+        raise ValueError("Measured gate has no log artifact.")
+    path = (evidence_dir / relative).resolve()
+    try:
+        path.relative_to(evidence_dir.resolve())
+    except ValueError as exc:
+        raise ValueError("Measured gate log path escapes the evidence directory.") from exc
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError(f"Measured gate log must contain a JSON object: {relative}")
+    return cast(dict[str, Any], raw)
+
+
+def finalize(
+    manifest: dict[str, Any],
+    evidence_dir: Path,
+) -> dict[str, Any]:
     rollback_evidence = _measured_gate(manifest, "rollback_check")
     package_evidence = _measured_gate(manifest, "package_installability")
+    rollback_report = _load_json_log(evidence_dir, rollback_evidence)
+    package_report = _load_json_log(evidence_dir, package_evidence)
+
+    if rollback_report.get("passed") is not True:
+        raise ValueError("Rollback report is not passed.")
+    if package_report.get("passed") is not True:
+        raise ValueError("Package installability report is not passed.")
+    archive_digest = package_report.get("archive_digest")
+    if not isinstance(archive_digest, str) or not archive_digest.startswith("sha256:"):
+        raise ValueError("Package report has no valid archive_digest.")
 
     rollback = manifest.get("rollback")
     if not isinstance(rollback, dict):
@@ -52,21 +80,22 @@ def finalize(manifest: dict[str, Any]) -> dict[str, Any]:
         {
             "tested": True,
             "scope": "source_tree",
+            "restored_base_tree": rollback_report.get("restored_base_tree"),
             "evidence": rollback_evidence,
-            "limitations": [
-                "Source-tree reversal was rehearsed in an isolated worktree.",
-                "Production, database, secret, and external-service rollback remain separate controls.",
-            ],
+            "limitations": rollback_report.get("limitations", []),
         }
     )
     manifest["package_installability"] = {
         "tested": True,
         "scope": "portable_skill_archive",
+        "archive_digest": archive_digest,
+        "deterministic_rebuild": package_report.get("deterministic_rebuild"),
+        "content_preserved_after_extract": package_report.get(
+            "content_preserved_after_extract"
+        ),
+        "file_count": package_report.get("file_count"),
         "evidence": package_evidence,
-        "limitations": [
-            "Portable package creation and extraction were verified.",
-            "Installation in a specific ChatGPT, Codex, or API account remains unverified.",
-        ],
+        "limitations": package_report.get("limitations", []),
     }
     return manifest
 
@@ -80,7 +109,7 @@ def main() -> int:
         raw = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
             raise ValueError("Manifest root must be an object.")
-        manifest = finalize(raw)
+        manifest = finalize(raw, path.parent)
         temporary = path.with_suffix(path.suffix + ".tmp")
         temporary.write_text(
             json.dumps(manifest, indent=2, sort_keys=True) + "\n",
