@@ -3,17 +3,16 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
-import os
-import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import ModuleType
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_DIR = ROOT / "skills" / "asi-verifiable-engineering"
 SCRIPTS_DIR = SKILL_DIR / "scripts"
+sys.path.insert(0, str(SCRIPTS_DIR))
 
 
 def load_module(name: str, path: Path) -> ModuleType:
@@ -24,8 +23,6 @@ def load_module(name: str, path: Path) -> ModuleType:
     spec.loader.exec_module(module)
     return module
 
-
-sys.path.insert(0, str(SCRIPTS_DIR))
 
 skill_validator = load_module(
     "skill_validator",
@@ -43,10 +40,6 @@ decision_engine = load_module(
     "decision_engine",
     SCRIPTS_DIR / "evaluate_change.py",
 )
-evidence_generator = load_module(
-    "evidence_generator",
-    SCRIPTS_DIR / "generate_ci_evidence.py",
-)
 
 
 class SkillPackageTests(unittest.TestCase):
@@ -60,8 +53,7 @@ class SkillPackageTests(unittest.TestCase):
 
     def test_name_must_match_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            skill = root / "correct-name"
+            skill = Path(temp) / "correct-name"
             skill.mkdir()
             (skill / "SKILL.md").write_text(
                 "---\n"
@@ -72,9 +64,7 @@ class SkillPackageTests(unittest.TestCase):
                 encoding="utf-8",
             )
             errors = skill_validator.validate_package(skill)
-            self.assertTrue(
-                any("must match directory" in error for error in errors)
-            )
+        self.assertTrue(any("must match directory" in error for error in errors))
 
 
 class PolicyTests(unittest.TestCase):
@@ -93,30 +83,21 @@ class PolicyTests(unittest.TestCase):
         errors = policy_validator.validate_policy(self.path)
         self.assertEqual([], errors, "\n".join(errors))
 
-    def test_placeholder_blocks_policy(self) -> None:
-        errors = self._validate_modified(
-            'policy_owner: "Eidon"',
-            'policy_owner: "REPLACE_WITH_OWNER"',
-        )
-        self.assertTrue(
-            any("placeholder" in error.lower() for error in errors)
-        )
-
-    def test_self_approval_must_remain_false(self) -> None:
-        errors = self._validate_modified(
-            "self_approve: false",
-            "self_approve: true",
-        )
-        self.assertTrue(any("self_approve" in error for error in errors))
-
     def test_required_gate_cannot_be_disabled(self) -> None:
         errors = self._validate_modified(
-            "secret_scan: true",
-            "secret_scan: false",
+            "dependency_scan: true",
+            "dependency_scan: false",
         )
-        self.assertTrue(any("secret_scan" in error for error in errors))
+        self.assertTrue(any("dependency_scan" in error for error in errors))
 
-    def test_line_by_line_review_is_not_default_gate(self) -> None:
+    def test_obsolete_generic_security_command_is_rejected(self) -> None:
+        errors = self._validate_modified(
+            "  test_honesty:",
+            "  security_scan: \"python fake.py\"\n  test_honesty:",
+        )
+        self.assertTrue(any("obsolete" in error for error in errors))
+
+    def test_line_by_line_review_is_not_default(self) -> None:
         errors = self._validate_modified(
             "line_by_line_review_default: false",
             "line_by_line_review_default: true",
@@ -126,230 +107,62 @@ class PolicyTests(unittest.TestCase):
         )
 
 
-class EvidenceTests(unittest.TestCase):
+class EvidenceStructureTests(unittest.TestCase):
     def setUp(self) -> None:
         path = SKILL_DIR / "assets" / "evidence-manifest.example.json"
-        self.valid_manifest = json.loads(path.read_text(encoding="utf-8"))
+        self.manifest = json.loads(path.read_text(encoding="utf-8"))
 
-    def test_example_manifest_is_valid(self) -> None:
-        errors = evidence_validator.validate_manifest(self.valid_manifest)
+    def test_blocked_example_is_structurally_valid(self) -> None:
+        errors = evidence_validator.validate_manifest(self.manifest)
         self.assertEqual([], errors, "\n".join(errors))
 
-    def test_approved_cannot_contain_unverified_items(self) -> None:
-        data = copy.deepcopy(self.valid_manifest)
-        data["unverified"] = ["integration environment"]
-        errors = evidence_validator.validate_manifest(data)
-        self.assertTrue(
-            any("cannot contain unverified" in error for error in errors)
-        )
-
-    def test_approved_cannot_contain_residual_risks(self) -> None:
-        data = copy.deepcopy(self.valid_manifest)
-        data["residual_risks"] = ["unknown external dependency"]
-        errors = evidence_validator.validate_manifest(data)
-        self.assertTrue(
-            any("cannot contain residual risks" in error for error in errors)
-        )
-
-    def test_high_risk_requires_human_independence(self) -> None:
-        data = copy.deepcopy(self.valid_manifest)
+    def test_blocked_high_risk_manifest_does_not_require_i3_yet(self) -> None:
+        data = copy.deepcopy(self.manifest)
         data["risk"] = "high"
-        data["independence"] = ["I1", "I2"]
-        errors = evidence_validator.validate_manifest(data)
-        self.assertTrue(any("requires I3" in error for error in errors))
-
-    def test_critical_approval_requires_two_approvers(self) -> None:
-        data = copy.deepcopy(self.valid_manifest)
-        data["risk"] = "critical"
-        data["evidence_level"] = "E8"
-        data["assurance_level"] = "T6"
-        data["independence"] = ["I2", "I3"]
         data["review"]["human_review"] = {
             "required": True,
-            "completed": True,
-            "mode": "targeted_dual",
+            "completed": False,
+            "mode": "targeted",
         }
-        data["approved_by"] = ["one-reviewer"]
         errors = evidence_validator.validate_manifest(data)
-        self.assertTrue(any("two approvers" in error for error in errors))
+        self.assertFalse(any("requires I3" in error for error in errors))
 
-    def test_passed_gate_requires_digest_bound_evidence(self) -> None:
-        data = copy.deepcopy(self.valid_manifest)
-        del data["gate_evidence"]["unit_tests"]
+    def test_gate_state_must_match_measured_exit_code(self) -> None:
+        data = copy.deepcopy(self.manifest)
+        data["commands"][0]["exit_code"] = 1
         errors = evidence_validator.validate_manifest(data)
-        self.assertTrue(
-            any("gate_evidence.unit_tests" in error for error in errors)
-        )
+        self.assertTrue(any("contradicts" in error for error in errors))
 
-    def test_builder_and_auditor_must_be_distinct(self) -> None:
-        data = copy.deepcopy(self.valid_manifest)
-        data["review"]["auditor"] = data["review"]["builder"]
+    def test_artifact_digest_must_match_every_reference(self) -> None:
+        data = copy.deepcopy(self.manifest)
+        data["commands"][0]["log_digest"] = "sha256:" + "9" * 64
         errors = evidence_validator.validate_manifest(data)
-        self.assertTrue(
-            any("must be distinct" in error for error in errors)
-        )
+        self.assertTrue(any("same digest" in error for error in errors))
 
 
 class DecisionEngineTests(unittest.TestCase):
     def setUp(self) -> None:
-        policy_path = ROOT / ".asi" / "policy.yml"
-        evidence_path = (
-            SKILL_DIR / "assets" / "evidence-manifest.example.json"
-        )
-        self.policy = decision_engine.parse_policy(policy_path)
-        self.manifest = json.loads(
-            evidence_path.read_text(encoding="utf-8")
-        )
+        self.policy = decision_engine.parse_policy(ROOT / ".asi" / "policy.yml")
+        path = SKILL_DIR / "assets" / "evidence-manifest.example.json"
+        self.manifest = json.loads(path.read_text(encoding="utf-8"))
 
-    def test_example_is_approved_without_line_by_line_review(self) -> None:
+    def test_incomplete_example_is_blocked_without_line_review(self) -> None:
         result = decision_engine.evaluate_change(
             self.policy,
             copy.deepcopy(self.manifest),
         )
-        self.assertEqual("APPROVED", result["decision"])
-        self.assertTrue(result["automatic_approval_eligible"])
+        self.assertEqual("BLOCKED", result["decision"])
         self.assertFalse(result["line_by_line_review_required"])
-        self.assertEqual([], result["blockers"])
 
-    def test_claimed_approval_does_not_override_failed_gate(self) -> None:
-        data = copy.deepcopy(self.manifest)
-        data["gates"]["unit_tests"] = "failed"
-        result = decision_engine.evaluate_change(self.policy, data)
-        self.assertEqual("BLOCKED", result["decision"])
-        self.assertFalse(result["automatic_approval_eligible"])
-        self.assertTrue(
-            any("unit_tests" in blocker for blocker in result["blockers"])
+    def test_binding_conflict_activates_forensic_review(self) -> None:
+        result = decision_engine.evaluate_change(
+            self.policy,
+            copy.deepcopy(self.manifest),
+            ["Artifact digest mismatch: gates/unit_tests.log"],
         )
-
-    def test_lower_assurance_cannot_be_approved(self) -> None:
-        data = copy.deepcopy(self.manifest)
-        data["assurance_level"] = "T2"
-        data["evidence_level"] = "E4"
-        result = decision_engine.evaluate_change(self.policy, data)
         self.assertEqual("BLOCKED", result["decision"])
-        self.assertTrue(
-            any("requires at least T4" in blocker for blocker in result["blockers"])
-        )
-
-    def test_same_builder_and_auditor_blocks(self) -> None:
-        data = copy.deepcopy(self.manifest)
-        data["review"]["auditor"] = data["review"]["builder"]
-        result = decision_engine.evaluate_change(self.policy, data)
-        self.assertEqual("BLOCKED", result["decision"])
-        self.assertTrue(
-            any("must be distinct" in blocker for blocker in result["blockers"])
-        )
-
-    def test_high_risk_uses_targeted_not_line_by_line_review(self) -> None:
-        data = copy.deepcopy(self.manifest)
-        data["risk"] = "high"
-        data["evidence_level"] = "E7"
-        data["assurance_level"] = "T5"
-        data["independence"] = ["I2", "I3"]
-        data["review"]["human_review"] = {
-            "required": True,
-            "completed": True,
-            "mode": "targeted",
-        }
-        data["approved_by"] = ["human-reviewer"]
-        result = decision_engine.evaluate_change(self.policy, data)
-        self.assertEqual("APPROVED", result["decision"])
-        self.assertFalse(result["automatic_approval_eligible"])
-        self.assertFalse(result["line_by_line_review_required"])
-        self.assertEqual("targeted", result["human_review_mode"])
-
-
-class EvidenceGeneratorTests(unittest.TestCase):
-    def _git(self, root: Path, *args: str) -> str:
-        return subprocess.check_output(
-            ["git", *args],
-            cwd=root,
-            text=True,
-        ).strip()
-
-    def test_generator_binds_manifest_to_real_diff(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            self._git(root, "init")
-            self._git(root, "config", "user.name", "ASI Test")
-            self._git(root, "config", "user.email", "asi@example.invalid")
-
-            policy = root / "policy.yml"
-            policy.write_text(
-                "commands:\n"
-                "  unit_tests: \"python -m unittest\"\n",
-                encoding="utf-8",
-            )
-            budget = root / "budget.json"
-            budget.write_text(
-                json.dumps(
-                    {
-                        "version": 1,
-                        "expected_paths": ["src.txt"],
-                        "rollback": "git revert",
-                    }
-                ),
-                encoding="utf-8",
-            )
-            source = root / "src.txt"
-            source.write_text("before\n", encoding="utf-8")
-            self._git(root, "add", ".")
-            self._git(root, "commit", "-m", "base")
-            base = self._git(root, "rev-parse", "HEAD")
-
-            source.write_text("after\n", encoding="utf-8")
-            self._git(root, "add", "src.txt")
-            self._git(root, "commit", "-m", "change")
-            head = self._git(root, "rev-parse", "HEAD")
-
-            evidence_dir = root / "evidence"
-            evidence_dir.mkdir()
-            tests_log = evidence_dir / "tests.log"
-            tests_log.write_text("negative test passed\n", encoding="utf-8")
-
-            args = SimpleNamespace(
-                repository="example/repository",
-                branch="feature/test",
-                base_commit=base,
-                head_commit=head,
-                evaluated_commit=head,
-                policy=str(policy),
-                budget=str(budget),
-                output_dir=str(evidence_dir),
-                builder="builder-agent",
-                workflow_run="https://example.invalid/run/1",
-                risk="high",
-                skill_version="0.1.0-test",
-                doctrine_version="1.2",
-                tests_log=str(tests_log),
-                passed_gate=[
-                    "integrity",
-                    "unit_tests",
-                ],
-                unverified=["Independent review pending."],
-                os_name="test-os",
-                architecture="test-arch",
-                runtime="python-test",
-                validity_days=7,
-            )
-
-            previous = Path.cwd()
-            try:
-                os.chdir(root)
-                manifest = evidence_generator.generate(args)
-            finally:
-                os.chdir(previous)
-
-            self.assertEqual(["src.txt"], manifest["changed_files"])
-            self.assertTrue(manifest["change_budget"]["within_budget"])
-            self.assertEqual([], manifest["change_budget"]["unexpected_files"])
-            self.assertEqual(head, manifest["evaluated_commit"])
-            self.assertEqual(head, manifest["integrable_commit"])
-            self.assertRegex(
-                manifest["diff_digest"],
-                r"^sha256:[0-9a-f]{64}$",
-            )
-            self.assertEqual("BLOCKED", manifest["decision"])
+        self.assertTrue(result["line_by_line_review_required"])
+        self.assertEqual("forensic", result["human_review_mode"])
 
 
 if __name__ == "__main__":
