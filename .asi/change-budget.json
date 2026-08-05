@@ -1,8 +1,9 @@
 {
   "version": 1,
+  "builder_context_id": "builder-context-bootstrap-solo-20260805-01",
   "change_id": "bootstrap-v0.1.0",
   "risk": "high",
-  "objective": "Bootstrap ASI Verifiable Engineering with a reachable evidence-bound T4-to-T5 promotion path and no default line-by-line inspection.",
+  "objective": "Bootstrap ASI Verifiable Engineering for one owner using separate AI audit contexts, deterministic CI, target observation, and no default line-by-line inspection.",
   "expected_paths": [
     ".asi/change-budget.json",
     ".asi/policy.yml",
@@ -69,8 +70,10 @@
     "A forbidden path, binary artifact, or unbounded diff appears.",
     "A required verification gate is weakened or disabled.",
     "A measured command differs from its policy command.",
-    "The builder is presented as the independent auditor.",
-    "Target observation is not bound to the current head and package digest.",
+    "Builder and auditor context identifiers are equal.",
+    "The audit attestation reports any write action.",
+    "Target observation is not bound to the current head, audit context, and package digest.",
+    "An agent claims owner merge authorization.",
     "An example manifest is substituted for evidence from the evaluated commit."
   ],
   "rollback": "Close pull request 1 and delete branch skill/bootstrap-v0.1.0."
