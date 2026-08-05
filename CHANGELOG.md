@@ -2,6 +2,24 @@
 
 All notable changes to ASI Verifiable Engineering are recorded here.
 
+## [0.1.0-draft.2] - 2026-08-05
+
+### Added
+
+- Evidence-derived decision engine: `evaluate_change.py`.
+- Strict automated-acceptance policy for low- and medium-risk changes.
+- Explicit objective of approval without default line-by-line review.
+- Annex E defining targeted human review and forensic-only exhaustive reading.
+- Commit, policy, diff, gate, artifact, budget, test-honesty, and reviewer bindings in the evidence manifest.
+- Regression tests proving that deceptive `APPROVED` claims are blocked.
+
+### Changed
+
+- Required gates can no longer be disabled in the strict policy profile.
+- Evidence validation now requires digest-bound primary artifacts and distinct builder/auditor contexts.
+- CI now derives the approval result rather than trusting the manifest decision field.
+- High- and critical-risk review is defined as targeted risk review, not automatic full line-by-line reading.
+
 ## [0.1.0-draft.1] - 2026-08-05
 
 ### Added
