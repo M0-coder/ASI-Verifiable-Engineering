@@ -4,7 +4,7 @@ doctrine:
   name: ASI Verifiable Engineering
   version: "1.2"
   skill_version: "0.1.0-draft.2"
-  repository: morimilpabfelon-cell/ASI-Verifiable-Engineering
+  source: "skills/asi-verifiable-engineering/SKILL.md"
 
 repository:
   default_risk: medium
@@ -12,33 +12,43 @@ repository:
   protected_branches:
     - main
   protected_paths:
-    - ".github/workflows/**"
     - ".asi/**"
-    - "infra/**"
-    - "migrations/**"
-    - "security/**"
+    - ".github/**"
+    - "mypy.ini"
+    - "requirements-ci.lock"
     - "auth/**"
     - "payments/**"
+    - "migrations/**"
+    - "infra/**"
 
 commands:
-  install: "REPLACE_WITH_CANONICAL_INSTALL_COMMAND"
+  install: "REPLACE_WITH_PINNED_INSTALL_COMMAND"
+  integrity: "REPLACE_WITH_CHANGE_BUDGET_COMMAND"
   format_check: "REPLACE_WITH_FORMAT_CHECK_COMMAND"
   lint: "REPLACE_WITH_LINT_COMMAND"
-  typecheck: "REPLACE_WITH_TYPECHECK_OR_NOT_APPLICABLE"
+  typecheck: "REPLACE_WITH_STRICT_TYPECHECK_COMMAND"
   build: "REPLACE_WITH_BUILD_COMMAND"
+  package_installability: "REPLACE_WITH_PACKAGE_INSTALLABILITY_COMMAND"
   unit_tests: "REPLACE_WITH_UNIT_TEST_COMMAND"
   integration_tests: "REPLACE_WITH_INTEGRATION_TEST_COMMAND"
-  security_scan: "REPLACE_WITH_SECURITY_SCAN_COMMAND"
+  secret_scan: "REPLACE_WITH_SECRET_SCAN_COMMAND"
+  dependency_scan: "REPLACE_WITH_SUPPLY_CHAIN_SCAN_COMMAND"
+  test_honesty: "REPLACE_WITH_ADVERSARIAL_TEST_COMMAND"
+  rollback_check: "REPLACE_WITH_ROLLBACK_REHEARSAL_COMMAND"
+  independent_audit: "REPLACE_WITH_INDEPENDENT_REVIEW_ATTESTATION_COMMAND"
 
 required_gates:
+  integrity: true
   format_check: true
   lint: true
   typecheck: true
   build: true
+  package_installability: true
   unit_tests: true
   integration_tests: true
   secret_scan: true
   dependency_scan: true
+  rollback_check: true
   independent_audit: true
 
 risk_escalation:
@@ -99,6 +109,8 @@ evidence:
   require_commit_sha: true
   require_exit_codes: true
   require_artifact_digests: true
+  require_measured_commands: true
+  require_binding_verification: true
 
 deployment:
   build_once_promote_same_artifact: true
