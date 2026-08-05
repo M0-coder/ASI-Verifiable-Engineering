@@ -50,6 +50,7 @@
     "tests/test_birth02_promotion.py",
     "tests/test_integration_evidence.py",
     "tests/test_policy_contract.py",
+    "tests/test_preoperational_levels.py",
     "tests/test_review_attestation.py",
     "tests/test_validators.py",
     "tools/validate_skill_package.py"
@@ -60,7 +61,7 @@
     "keys/**",
     "secrets/**"
   ],
-  "max_files": 56,
+  "max_files": 57,
   "max_changed_lines": 12000,
   "allow_binary_files": false,
   "stop_conditions": [
