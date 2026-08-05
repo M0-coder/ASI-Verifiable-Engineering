@@ -21,18 +21,23 @@ jobs:
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONPYCACHEPREFIX: /tmp/asi-pycache
+      EVIDENCE_DIR: ${{ runner.temp }}/asi-evidence
 
     steps:
-      - name: Check out exact commit
+      - name: Check out exact integrable state
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
           cache: ""
+
+      - name: Prepare evidence directory
+        run: mkdir -p "$EVIDENCE_DIR"
 
       - name: Record baseline
         run: |
@@ -50,7 +55,7 @@ jobs:
       - name: Validate example evidence manifest
         run: python skills/asi-verifiable-engineering/scripts/validate_evidence.py skills/asi-verifiable-engineering/assets/evidence-manifest.example.json
 
-      - name: Derive decision from policy and evidence
+      - name: Derive reference decision from policy and evidence
         run: python skills/asi-verifiable-engineering/scripts/evaluate_change.py .asi/policy.yml skills/asi-verifiable-engineering/assets/evidence-manifest.example.json --expect APPROVED
 
       - name: Validate JSON syntax
@@ -59,10 +64,94 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q tools tests skills/asi-verifiable-engineering/scripts
 
-      - name: Run regression tests
-        run: python -m unittest discover -s tests -v
+      - name: Run regression and adversarial tests
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -v 2>&1 | tee "$EVIDENCE_DIR/tests.log"
+
+      - name: Secret scan
+        run: python tools/validate_skill_package.py skills/asi-verifiable-engineering
+
+      - name: Dependency and action pin scan
+        run: python tools/validate_skill_package.py skills/asi-verifiable-engineering
+
+      - name: Generate actual PR evidence manifest
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python skills/asi-verifiable-engineering/scripts/generate_ci_evidence.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --branch "$PR_BRANCH" \
+            --base-commit "$BASE_SHA" \
+            --head-commit "$HEAD_SHA" \
+            --evaluated-commit "$GITHUB_SHA" \
+            --policy .asi/policy.yml \
+            --budget .asi/evidence-inputs/pr-1-change-budget.json \
+            --output-dir "$EVIDENCE_DIR" \
+            --builder "$PR_AUTHOR" \
+            --workflow-run "$RUN_URL" \
+            --risk high \
+            --skill-version "$(cat VERSION)" \
+            --doctrine-version "1.2" \
+            --tests-log "$EVIDENCE_DIR/tests.log" \
+            --passed-gate integrity \
+            --passed-gate format_check \
+            --passed-gate lint \
+            --passed-gate typecheck \
+            --passed-gate build \
+            --passed-gate unit_tests \
+            --passed-gate integration_tests \
+            --passed-gate secret_scan \
+            --passed-gate dependency_scan \
+            --unverified "Independent targeted human review is pending." \
+            --unverified "Installation in Codex or ChatGPT is pending." \
+            --unverified "Branch protection and required checks are not configured." \
+            > "$EVIDENCE_DIR/generated-manifest-output.json"
+          python -m json.tool "$EVIDENCE_DIR/manifest.json" > /dev/null
+
+      - name: Enforce actual PR decision
+        if: github.event_name == 'pull_request'
+        run: |
+          set +e
+          python skills/asi-verifiable-engineering/scripts/evaluate_change.py \
+            .asi/policy.yml \
+            "$EVIDENCE_DIR/manifest.json" \
+            > "$EVIDENCE_DIR/decision.json"
+          evaluation_status=$?
+          set -e
+          python - "$EVIDENCE_DIR/decision.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          result = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          if result["decision"] != "BLOCKED":
+              raise SystemExit(
+                  "Bootstrap PR must remain BLOCKED until independent high-risk review exists."
+              )
+          if result["line_by_line_review_required"] is not False:
+              raise SystemExit("Line-by-line review must not become the default gate.")
+          print(json.dumps(result, indent=2, sort_keys=True))
+          PY
+          exit "$evaluation_status"
+
+      - name: Upload actual CI evidence
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: asi-evidence-${{ github.run_id }}
+          path: ${{ runner.temp }}/asi-evidence/
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Confirm clean working tree
+        if: always()
         run: |
           set -euo pipefail
           test -z "$(git status --porcelain)"
