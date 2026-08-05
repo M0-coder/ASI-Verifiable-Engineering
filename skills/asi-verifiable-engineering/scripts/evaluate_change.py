@@ -84,6 +84,7 @@ def parse_policy(path: Path) -> dict[str, Any]:
     }
 
     acceptance = _section(text, "automated_acceptance")
+    governance = _section(text, "governance")
     assurance_section = _section(text, "assurance")
     assurance: dict[str, dict[str, Any]] = {}
     for risk in ("low", "medium", "high", "critical"):
@@ -103,7 +104,13 @@ def parse_policy(path: Path) -> dict[str, Any]:
             "independence": independence,
         }
 
+    operator_match = re.search(
+        r"^  operator_mode:\s*([a-z_]+)\s*$",
+        governance,
+        re.MULTILINE,
+    )
     return {
+        "operator_mode": operator_match.group(1) if operator_match else None,
         "required_gates": required_gates,
         "assurance": assurance,
         "automated_acceptance": {
@@ -189,6 +196,8 @@ def evaluate_change(
     if any(_binding_requires_forensics(error) for error in binding_errors):
         forensic_triggers.add("evidence_integrity_conflict")
 
+    if policy.get("operator_mode") != "solo":
+        blockers.append("Policy must declare governance.operator_mode=solo.")
     if acceptance.get("line_by_line_review_default") is not False:
         blockers.append("Policy must explicitly set line_by_line_review_default=false.")
 
@@ -238,7 +247,7 @@ def evaluate_change(
         and residual_risks
         and risk in acceptance.get("eligible_risks", [])
     ):
-        notes.append("Residual risks require explicit human risk acceptance.")
+        notes.append("Residual risks require explicit owner risk acceptance.")
 
     budget = manifest.get("change_budget")
     if acceptance.get("require_change_budget"):
@@ -255,14 +264,22 @@ def evaluate_change(
     review = manifest.get("review")
     if acceptance.get("require_distinct_builder_auditor"):
         if not isinstance(review, dict):
-            blockers.append("Independent review metadata is required.")
+            blockers.append("Independent audit metadata is required.")
         else:
             if not review.get("auditor"):
-                blockers.append("Independent auditor identity is required.")
+                blockers.append("Independent auditor context identity is required.")
             if review.get("builder") == review.get("auditor"):
-                blockers.append("Builder and auditor must be distinct.")
+                blockers.append("Builder and auditor contexts must be distinct.")
             if review.get("same_context") is not False:
                 blockers.append("Builder and auditor must use independent contexts.")
+            audit_review = review.get("audit_review")
+            if not isinstance(audit_review, dict):
+                blockers.append("Separate AI audit metadata is required.")
+            else:
+                if audit_review.get("completed") is not True:
+                    blockers.append("Separate AI audit must be completed.")
+                if audit_review.get("mode") != "separate_ai_read_only":
+                    blockers.append("Audit mode must be separate_ai_read_only.")
 
     rollback = manifest.get("rollback")
     if (
@@ -275,12 +292,17 @@ def evaluate_change(
         blockers.append("integrable_commit must equal evaluated_commit.")
 
     human_review = review.get("human_review", {}) if isinstance(review, dict) else {}
-    if risk in {"high", "critical"}:
-        expected_mode = "targeted_dual" if risk == "critical" else "targeted"
+    if risk == "high":
+        if human_review.get("mode") != "owner_merge":
+            blockers.append("High-risk solo operation requires owner_merge authorization mode.")
+    if risk == "critical":
         if human_review.get("completed") is not True:
-            blockers.append(f"{risk} risk requires completed {expected_mode} human review.")
-        if human_review.get("mode") != expected_mode:
-            blockers.append(f"{risk} risk requires human review mode {expected_mode}.")
+            blockers.append("Critical risk requires completed targeted_dual human review.")
+        if human_review.get("mode") != "targeted_dual":
+            blockers.append("Critical risk requires human review mode targeted_dual.")
+        approved_by = manifest.get("approved_by")
+        if not isinstance(approved_by, list) or len(approved_by) < 2:
+            blockers.append("Critical risk requires at least two human approvers.")
 
     claimed_decision = manifest.get("decision")
     if blockers:
@@ -307,6 +329,13 @@ def evaluate_change(
     )
 
     line_by_line_required = bool(forensic_triggers)
+    if risk == "critical":
+        authorization_level = "H2"
+    elif risk == "high":
+        authorization_level = "H1"
+    else:
+        authorization_level = "H0"
+
     if line_by_line_required:
         human_action = "perform_forensic_review_and_rebuild_evidence"
         human_review_mode = "forensic"
@@ -316,16 +345,16 @@ def evaluate_change(
     elif risk == "critical":
         human_review_mode = "targeted_dual"
         human_action = (
-            "targeted_dual_review_completed"
+            "dual_human_authorization_completed"
             if derived_decision == "APPROVED"
             else "complete_targeted_dual_review_and_resolve_blockers"
         )
     elif risk == "high":
-        human_review_mode = "targeted"
+        human_review_mode = "owner_merge"
         human_action = (
-            "targeted_risk_review_completed"
+            "owner_authorize_merge"
             if derived_decision == "APPROVED"
-            else "complete_targeted_review_and_resolve_blockers"
+            else "complete_separate_audit_observation_and_resolve_blockers"
         )
     elif residual_risks or manifest.get("conditions"):
         human_action = "accept_or_reject_residual_risk"
@@ -339,6 +368,8 @@ def evaluate_change(
         "claimed_decision": claimed_decision,
         "automatic_approval_eligible": automatic_eligible,
         "approval_basis": "policy_and_verified_primary_evidence",
+        "operator_mode": policy.get("operator_mode"),
+        "authorization_level": authorization_level,
         "line_by_line_review_required": line_by_line_required,
         "forensic_triggers": sorted(forensic_triggers),
         "human_review_mode": human_review_mode,
