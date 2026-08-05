@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Finalize recovery and package claims from measured gate evidence."""
+"""Finalize measured technical, recovery, and package evidence claims."""
 
 from __future__ import annotations
 
@@ -7,6 +7,12 @@ import json
 import sys
 from pathlib import Path
 from typing import Any, cast
+
+EXTERNAL_PROMOTION_GATES = {
+    "branch_protection",
+    "independent_audit",
+    "target_environment_observation",
+}
 
 
 def _measured_gate(manifest: dict[str, Any], name: str) -> dict[str, Any]:
@@ -56,6 +62,23 @@ def _load_json_log(evidence_dir: Path, gate: dict[str, Any]) -> dict[str, Any]:
     return cast(dict[str, Any], raw)
 
 
+def _finalize_preoperational_level(manifest: dict[str, Any]) -> None:
+    gates = manifest.get("gates")
+    if not isinstance(gates, dict):
+        raise ValueError("Manifest gates are missing.")
+    technical = {
+        name: state
+        for name, state in gates.items()
+        if name not in EXTERNAL_PROMOTION_GATES
+    }
+    if technical and all(state == "passed" for state in technical.values()):
+        manifest["evidence_level"] = "E6"
+        manifest["assurance_level"] = "T4"
+    else:
+        manifest["evidence_level"] = "E5"
+        manifest["assurance_level"] = "T3"
+
+
 def finalize(
     manifest: dict[str, Any],
     evidence_dir: Path,
@@ -97,6 +120,7 @@ def finalize(
         "evidence": package_evidence,
         "limitations": package_report.get("limitations", []),
     }
+    _finalize_preoperational_level(manifest)
     return manifest
 
 
