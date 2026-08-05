@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collect commit-bound review and target-observation attestations from GitHub."""
+"""Collect context-separated AI audit and target-observation attestations."""
 
 from __future__ import annotations
 
@@ -17,29 +17,199 @@ from typing import Any, Callable, cast
 REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
-DECISIVE_STATES = {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}
 TRUSTED_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
+ACCEPTED_REVIEW_STATES = {"COMMENTED", "APPROVED"}
 TARGET_ENVIRONMENTS = {"chatgpt", "codex", "openai-api"}
-REVIEW_MARKER = "ASI-TARGETED-REVIEW-V1"
-OBSERVATION_MARKER = "ASI-TARGET-OBSERVATION-V1"
-OBSERVATION_URL = re.compile(
-    r"^ASI-TARGET-EVIDENCE-URL:\s*(https://raw\.githubusercontent\.com/\S+)\s*$",
+AUDIT_MARKER = "ASI-SOLO-AUDIT-V1"
+EVIDENCE_URL = re.compile(
+    r"^ASI-AUDIT-EVIDENCE-URL:\s*(https://raw\.githubusercontent\.com/\S+)\s*$",
     re.MULTILINE,
 )
-OBSERVATION_DIGEST = re.compile(
-    r"^ASI-TARGET-EVIDENCE-SHA256:\s*(sha256:[0-9a-f]{64})\s*$",
+EVIDENCE_DIGEST = re.compile(
+    r"^ASI-AUDIT-EVIDENCE-SHA256:\s*(sha256:[0-9a-f]{64})\s*$",
     re.MULTILINE,
 )
-MAX_OBSERVATION_BYTES = 1_000_000
-ObservationLoader = Callable[[str, str], dict[str, Any]]
+MAX_EVIDENCE_BYTES = 1_000_000
+EvidenceLoader = Callable[[str, str], dict[str, Any]]
 
 
-def latest_decisive_reviews(reviews: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _recent_timestamp(
+    value: Any,
+    field: str,
+    errors: list[str],
+    now: datetime,
+) -> str | None:
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            raise ValueError
+    except ValueError:
+        errors.append(f"invalid_{field}")
+        return None
+    if parsed > now + timedelta(minutes=5):
+        errors.append(f"{field}_is_in_the_future")
+    if now - parsed > timedelta(days=7):
+        errors.append(f"{field}_is_older_than_seven_days")
+    return str(value)
+
+
+def fetch_external_evidence(url: str, expected_digest: str) -> dict[str, Any]:
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname != "raw.githubusercontent.com":
+        raise ValueError("Audit evidence must use raw.githubusercontent.com over HTTPS.")
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "asi-verifiable-engineering"},
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        payload = response.read(MAX_EVIDENCE_BYTES + 1)
+    if len(payload) > MAX_EVIDENCE_BYTES:
+        raise ValueError("Audit evidence exceeds the one-megabyte limit.")
+    digest = "sha256:" + hashlib.sha256(payload).hexdigest()
+    if digest != expected_digest:
+        raise ValueError("Audit evidence SHA-256 does not match the review declaration.")
+    raw = json.loads(payload.decode("utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("Audit evidence root must be a JSON object.")
+    return cast(dict[str, Any], raw)
+
+
+def validate_attestation(
+    raw: dict[str, Any],
+    repository: str,
+    head_commit: str,
+    builder_context_id: str,
+    evidence_url: str,
+    evidence_digest: str,
+    now: datetime | None = None,
+) -> tuple[dict[str, Any], dict[str, Any] | None, list[str]]:
+    errors: list[str] = []
+    current = now or datetime.now(timezone.utc)
+
+    if raw.get("attestation_version") != 1:
+        errors.append("attestation_version_must_equal_1")
+    if raw.get("operator_mode") != "solo":
+        errors.append("operator_mode_must_be_solo")
+    if raw.get("repository") != repository:
+        errors.append("attestation_repository_mismatch")
+    if raw.get("head_commit") != head_commit:
+        errors.append("attestation_head_commit_mismatch")
+    if raw.get("builder_context_id") != builder_context_id:
+        errors.append("builder_context_id_mismatch")
+
+    auditor_context = raw.get("auditor_context_id")
+    if not isinstance(auditor_context, str) or not auditor_context.strip():
+        errors.append("auditor_context_id_is_required")
+    elif auditor_context == builder_context_id:
+        errors.append("auditor_context_must_differ_from_builder_context")
+
+    audit_raw = raw.get("audit")
+    audit: dict[str, Any] = {}
+    if not isinstance(audit_raw, dict):
+        errors.append("audit_object_is_required")
+    else:
+        if audit_raw.get("mode") != "read_only":
+            errors.append("audit_mode_must_be_read_only")
+        if audit_raw.get("result") != "passed":
+            errors.append("audit_result_is_not_passed")
+        checks = audit_raw.get("checks")
+        if (
+            not isinstance(checks, list)
+            or not checks
+            or any(not isinstance(item, str) or not item for item in checks)
+        ):
+            errors.append("audit_checks_must_be_a_non_empty_string_list")
+        findings = audit_raw.get("findings")
+        if not isinstance(findings, list):
+            errors.append("audit_findings_must_be_a_list")
+        write_actions = audit_raw.get("write_actions")
+        if write_actions != []:
+            errors.append("audit_write_actions_must_be_empty")
+        created_at = _recent_timestamp(
+            audit_raw.get("created_at"),
+            "audit_created_at",
+            errors,
+            current,
+        )
+        audit = {
+            "mode": audit_raw.get("mode"),
+            "result": audit_raw.get("result"),
+            "created_at": created_at,
+            "checks": checks,
+            "findings": findings,
+            "write_actions": write_actions,
+        }
+
+    normalized = {
+        "attestation_version": raw.get("attestation_version"),
+        "operator_mode": raw.get("operator_mode"),
+        "repository": raw.get("repository"),
+        "head_commit": raw.get("head_commit"),
+        "builder_context_id": raw.get("builder_context_id"),
+        "auditor_context_id": auditor_context,
+        "audit": audit,
+        "evidence_url": evidence_url,
+        "evidence_digest": evidence_digest,
+    }
+
+    observation_normalized: dict[str, Any] | None = None
+    observation_raw = raw.get("target_observation")
+    if observation_raw is not None:
+        observation_errors: list[str] = []
+        if not isinstance(observation_raw, dict):
+            observation_errors.append("target_observation_must_be_an_object")
+        else:
+            environment = observation_raw.get("target_environment")
+            if environment not in TARGET_ENVIRONMENTS:
+                observation_errors.append("unsupported_target_environment")
+            if observation_raw.get("result") != "passed":
+                observation_errors.append("target_observation_result_is_not_passed")
+            package_digest = observation_raw.get("package_digest")
+            if not isinstance(package_digest, str) or not SHA256.fullmatch(package_digest):
+                observation_errors.append("invalid_package_digest")
+            checks = observation_raw.get("checks")
+            if (
+                not isinstance(checks, list)
+                or not checks
+                or any(not isinstance(item, str) or not item for item in checks)
+            ):
+                observation_errors.append(
+                    "target_checks_must_be_a_non_empty_string_list"
+                )
+            executed_at = _recent_timestamp(
+                observation_raw.get("executed_at"),
+                "observation_executed_at",
+                observation_errors,
+                current,
+            )
+            observation_normalized = {
+                "repository": repository,
+                "head_commit": head_commit,
+                "auditor_context_id": auditor_context,
+                "target_environment": environment,
+                "package_digest": package_digest,
+                "result": observation_raw.get("result"),
+                "executed_at": executed_at,
+                "checks": checks,
+                "limitations": observation_raw.get("limitations", []),
+                "evidence_url": evidence_url,
+                "evidence_digest": evidence_digest,
+            }
+        if observation_errors:
+            normalized["target_observation_errors"] = observation_errors
+            observation_normalized = None
+
+    return normalized, observation_normalized, errors
+
+
+def latest_audit_reviews(reviews: list[dict[str, Any]]) -> list[dict[str, Any]]:
     latest: dict[str, dict[str, Any]] = {}
     for review in sorted(reviews, key=lambda item: int(item.get("id", 0))):
+        body = review.get("body")
         user = review.get("user")
-        state = review.get("state")
-        if not isinstance(user, dict) or state not in DECISIVE_STATES:
+        if not isinstance(body, str) or AUDIT_MARKER not in body:
+            continue
+        if not isinstance(user, dict):
             continue
         login = user.get("login")
         if isinstance(login, str) and login:
@@ -47,196 +217,112 @@ def latest_decisive_reviews(reviews: list[dict[str, Any]]) -> list[dict[str, Any
     return [latest[login] for login in sorted(latest)]
 
 
-def fetch_external_observation(url: str, expected_digest: str) -> dict[str, Any]:
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme != "https" or parsed.hostname != "raw.githubusercontent.com":
-        raise ValueError("Target evidence must use raw.githubusercontent.com over HTTPS.")
-    request = urllib.request.Request(
-        url,
-        headers={"User-Agent": "asi-verifiable-engineering"},
-    )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        payload = response.read(MAX_OBSERVATION_BYTES + 1)
-    if len(payload) > MAX_OBSERVATION_BYTES:
-        raise ValueError("Target evidence exceeds the one-megabyte limit.")
-    digest = "sha256:" + hashlib.sha256(payload).hexdigest()
-    if digest != expected_digest:
-        raise ValueError("Target evidence SHA-256 does not match the review declaration.")
-    raw = json.loads(payload.decode("utf-8"))
-    if not isinstance(raw, dict):
-        raise ValueError("Target evidence root must be a JSON object.")
-    return cast(dict[str, Any], raw)
-
-
-def validate_observation(
-    raw: dict[str, Any],
-    repository: str,
-    head_commit: str,
-    reviewer: str,
-    evidence_url: str,
-    evidence_digest: str,
-    now: datetime | None = None,
-) -> tuple[dict[str, Any], list[str]]:
-    errors: list[str] = []
-    current = now or datetime.now(timezone.utc)
-    if raw.get("observation_version") != 1:
-        errors.append("observation_version_must_equal_1")
-    if raw.get("repository") != repository:
-        errors.append("observation_repository_mismatch")
-    if raw.get("head_commit") != head_commit:
-        errors.append("observation_head_commit_mismatch")
-    if raw.get("reviewer") != reviewer:
-        errors.append("observation_reviewer_mismatch")
-    target = raw.get("target_environment")
-    if target not in TARGET_ENVIRONMENTS:
-        errors.append("unsupported_target_environment")
-    if raw.get("result") != "passed":
-        errors.append("target_observation_result_is_not_passed")
-    package_digest = raw.get("package_digest")
-    if not isinstance(package_digest, str) or not SHA256.fullmatch(package_digest):
-        errors.append("invalid_package_digest")
-    checks = raw.get("checks")
-    if (
-        not isinstance(checks, list)
-        or not checks
-        or any(not isinstance(item, str) or not item for item in checks)
-    ):
-        errors.append("checks_must_be_a_non_empty_string_list")
-    executed_at = raw.get("executed_at")
-    try:
-        observed = datetime.fromisoformat(str(executed_at).replace("Z", "+00:00"))
-        if observed.tzinfo is None:
-            raise ValueError
-        if observed > current + timedelta(minutes=5):
-            errors.append("observation_time_is_in_the_future")
-        if current - observed > timedelta(days=7):
-            errors.append("observation_is_older_than_seven_days")
-    except ValueError:
-        errors.append("invalid_executed_at")
-
-    return (
-        {
-            "observation_version": raw.get("observation_version"),
-            "repository": raw.get("repository"),
-            "head_commit": raw.get("head_commit"),
-            "reviewer": raw.get("reviewer"),
-            "target_environment": target,
-            "package_digest": package_digest,
-            "result": raw.get("result"),
-            "executed_at": executed_at,
-            "checks": checks,
-            "limitations": raw.get("limitations", []),
-            "evidence_url": evidence_url,
-            "evidence_digest": evidence_digest,
-        },
-        errors,
-    )
-
-
 def evaluate_reviews(
     reviews: list[dict[str, Any]],
-    builder: str,
+    builder_context_id: str,
     head_commit: str,
     repository: str,
-    observation_loader: ObservationLoader = fetch_external_observation,
+    evidence_loader: EvidenceLoader = fetch_external_evidence,
 ) -> dict[str, Any]:
-    approvals: list[dict[str, Any]] = []
+    audits: list[dict[str, Any]] = []
     observations: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
 
-    for review in latest_decisive_reviews(reviews):
+    for review in latest_audit_reviews(reviews):
         user = review.get("user")
         if not isinstance(user, dict):
             continue
-        login_value = user.get("login")
-        login = login_value if isinstance(login_value, str) else ""
+        actor_value = user.get("login")
+        actor = actor_value if isinstance(actor_value, str) else ""
         reasons: list[str] = []
-        if review.get("state") != "APPROVED":
-            reasons.append("latest_decisive_state_is_not_approved")
+        state = review.get("state")
+        if state not in ACCEPTED_REVIEW_STATES:
+            reasons.append("review_state_is_not_comment_or_approval")
         if review.get("commit_id") != head_commit:
-            reasons.append("review_is_stale_for_current_head")
+            reasons.append("audit_is_stale_for_current_head")
         if user.get("type") != "User":
-            reasons.append("reviewer_is_not_a_human_user_account")
-        if not login:
-            reasons.append("reviewer_login_is_missing")
-        if login == builder:
-            reasons.append("reviewer_is_the_builder")
+            reasons.append("audit_actor_is_not_a_human_user_account")
+        if not actor:
+            reasons.append("audit_actor_login_is_missing")
         if review.get("author_association") not in TRUSTED_ASSOCIATIONS:
-            reasons.append("reviewer_is_not_a_trusted_repository_associate")
-        body_value = review.get("body")
-        body = body_value if isinstance(body_value, str) else ""
-        if REVIEW_MARKER not in body:
-            reasons.append("targeted_review_marker_is_missing")
+            reasons.append("audit_actor_is_not_a_trusted_repository_associate")
         if not review.get("submitted_at"):
             reasons.append("submitted_at_is_missing")
 
+        body_value = review.get("body")
+        body = body_value if isinstance(body_value, str) else ""
+        url_match = EVIDENCE_URL.search(body)
+        digest_match = EVIDENCE_DIGEST.search(body)
+        if url_match is None:
+            reasons.append("audit_evidence_url_is_missing")
+        if digest_match is None:
+            reasons.append("audit_evidence_digest_is_missing")
+
         normalized: dict[str, Any] = {
             "review_id": review.get("id"),
-            "reviewer": login,
-            "state": review.get("state"),
+            "actor": actor,
+            "state": state,
             "commit_id": review.get("commit_id"),
             "submitted_at": review.get("submitted_at"),
             "author_association": review.get("author_association"),
             "html_url": review.get("html_url"),
-            "review_marker": REVIEW_MARKER,
+            "audit_marker": AUDIT_MARKER,
         }
         if reasons:
             normalized["reasons"] = reasons
             rejected.append(normalized)
             continue
 
-        if OBSERVATION_MARKER in body:
-            url_match = OBSERVATION_URL.search(body)
-            digest_match = OBSERVATION_DIGEST.search(body)
-            observation_errors: list[str] = []
-            if url_match is None:
-                observation_errors.append("target_evidence_url_is_missing")
-            if digest_match is None:
-                observation_errors.append("target_evidence_digest_is_missing")
-            if not observation_errors:
-                assert url_match is not None
-                assert digest_match is not None
-                evidence_url = url_match.group(1)
-                evidence_digest = digest_match.group(1)
-                try:
-                    raw = observation_loader(evidence_url, evidence_digest)
-                    observation, validation_errors = validate_observation(
-                        raw,
-                        repository,
-                        head_commit,
-                        login,
-                        evidence_url,
-                        evidence_digest,
-                    )
-                    observation_errors.extend(validation_errors)
-                    if not validation_errors:
-                        normalized["target_observation"] = observation
-                        observations.append(observation)
-                except (
-                    OSError,
-                    ValueError,
-                    urllib.error.HTTPError,
-                    urllib.error.URLError,
-                    json.JSONDecodeError,
-                    UnicodeDecodeError,
-                ) as exc:
-                    observation_errors.append(f"target_evidence_error:{exc}")
-            if observation_errors:
-                normalized["target_observation_errors"] = observation_errors
-        approvals.append(normalized)
+        assert url_match is not None
+        assert digest_match is not None
+        evidence_url = url_match.group(1)
+        evidence_digest = digest_match.group(1)
+        try:
+            raw = evidence_loader(evidence_url, evidence_digest)
+            audit, observation, validation_errors = validate_attestation(
+                raw,
+                repository,
+                head_commit,
+                builder_context_id,
+                evidence_url,
+                evidence_digest,
+            )
+            if validation_errors:
+                normalized["reasons"] = validation_errors
+                normalized["attestation"] = audit
+                rejected.append(normalized)
+                continue
+            audit["actor"] = actor
+            audit["review_id"] = review.get("id")
+            audit["html_url"] = review.get("html_url")
+            audits.append(audit)
+            if observation is not None:
+                observation["actor"] = actor
+                observation["review_id"] = review.get("id")
+                observations.append(observation)
+        except (
+            OSError,
+            ValueError,
+            urllib.error.HTTPError,
+            urllib.error.URLError,
+            json.JSONDecodeError,
+            UnicodeDecodeError,
+        ) as exc:
+            normalized["reasons"] = [f"audit_evidence_error:{exc}"]
+            rejected.append(normalized)
 
     return {
-        "attestation_version": 2,
-        "source": "github_pull_request_reviews_api",
-        "builder": builder,
+        "attestation_version": 3,
+        "operator_mode": "solo",
+        "source": "github_pull_request_review_comment_and_external_evidence",
+        "builder_context_id": builder_context_id,
         "head_commit": head_commit,
         "repository": repository,
-        "review_marker": REVIEW_MARKER,
-        "observation_marker": OBSERVATION_MARKER,
-        "approvals": approvals,
+        "audit_marker": AUDIT_MARKER,
+        "audits": audits,
         "observations": observations,
-        "rejected_latest_reviews": rejected,
-        "passed": bool(approvals),
+        "rejected_audits": rejected,
+        "passed": bool(audits),
         "observation_passed": bool(observations),
     }
 
@@ -278,7 +364,7 @@ def _required_environment() -> tuple[str, int, str, str, str]:
     repository = os.environ.get("ASI_REPOSITORY", "")
     pull_request_raw = os.environ.get("ASI_PR_NUMBER", "")
     head_commit = os.environ.get("ASI_HEAD_SHA", "")
-    builder = os.environ.get("ASI_BUILDER", "")
+    builder_context_id = os.environ.get("ASI_BUILDER_CONTEXT_ID", "")
     token = os.environ.get("GITHUB_TOKEN", "")
     if not REPOSITORY.fullmatch(repository):
         raise ValueError("ASI_REPOSITORY must use owner/repository format.")
@@ -290,17 +376,17 @@ def _required_environment() -> tuple[str, int, str, str, str]:
         raise ValueError("ASI_PR_NUMBER must be positive.")
     if not SHA40.fullmatch(head_commit):
         raise ValueError("ASI_HEAD_SHA must be a 40-character lowercase SHA.")
-    if not builder:
-        raise ValueError("ASI_BUILDER is required.")
+    if not builder_context_id:
+        raise ValueError("ASI_BUILDER_CONTEXT_ID is required.")
     if not token:
         raise ValueError("GITHUB_TOKEN is required.")
-    return repository, pull_request, head_commit, builder, token
+    return repository, pull_request, head_commit, builder_context_id, token
 
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     group = result.add_mutually_exclusive_group(required=True)
-    group.add_argument("--require-review", action="store_true")
+    group.add_argument("--require-audit", action="store_true")
     group.add_argument("--require-observation", action="store_true")
     return result
 
@@ -308,11 +394,16 @@ def parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = parser().parse_args()
     try:
-        repository, pull_request, head_commit, builder, token = (
+        repository, pull_request, head_commit, builder_context_id, token = (
             _required_environment()
         )
         reviews = fetch_reviews(repository, pull_request, token)
-        report = evaluate_reviews(reviews, builder, head_commit, repository)
+        report = evaluate_reviews(
+            reviews,
+            builder_context_id,
+            head_commit,
+            repository,
+        )
         report["pull_request"] = pull_request
     except (
         OSError,
@@ -322,8 +413,9 @@ def main() -> int:
         json.JSONDecodeError,
     ) as exc:
         report = {
-            "attestation_version": 2,
-            "source": "github_pull_request_reviews_api",
+            "attestation_version": 3,
+            "operator_mode": "solo",
+            "source": "github_pull_request_review_comment_and_external_evidence",
             "passed": False,
             "observation_passed": False,
             "error": str(exc),
