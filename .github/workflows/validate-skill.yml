@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   validate:
-    name: Validate package, policy, and evidence
+    name: Validate package, policy, evidence, and decision
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -49,6 +49,9 @@ jobs:
 
       - name: Validate example evidence manifest
         run: python skills/asi-verifiable-engineering/scripts/validate_evidence.py skills/asi-verifiable-engineering/assets/evidence-manifest.example.json
+
+      - name: Derive decision from policy and evidence
+        run: python skills/asi-verifiable-engineering/scripts/evaluate_change.py .asi/policy.yml skills/asi-verifiable-engineering/assets/evidence-manifest.example.json --expect APPROVED
 
       - name: Validate JSON syntax
         run: python -m json.tool skills/asi-verifiable-engineering/assets/evidence-manifest.example.json > /dev/null
