@@ -3,7 +3,7 @@ version: 1
 doctrine:
   name: ASI Verifiable Engineering
   version: "1.2"
-  skill_version: "0.1.0-draft.1"
+  skill_version: "0.1.0-draft.2"
   source: "skills/asi-verifiable-engineering/SKILL.md"
 
 repository:
@@ -26,7 +26,7 @@ commands:
   typecheck: "python -m compileall tools tests skills/asi-verifiable-engineering/scripts"
   build: "python tools/validate_skill_package.py skills/asi-verifiable-engineering"
   unit_tests: "python -m unittest discover -s tests -v"
-  integration_tests: "python skills/asi-verifiable-engineering/scripts/validate_policy.py .asi/policy.yml && python skills/asi-verifiable-engineering/scripts/validate_evidence.py skills/asi-verifiable-engineering/assets/evidence-manifest.example.json"
+  integration_tests: "python skills/asi-verifiable-engineering/scripts/validate_policy.py .asi/policy.yml && python skills/asi-verifiable-engineering/scripts/validate_evidence.py skills/asi-verifiable-engineering/assets/evidence-manifest.example.json && python skills/asi-verifiable-engineering/scripts/evaluate_change.py .asi/policy.yml skills/asi-verifiable-engineering/assets/evidence-manifest.example.json --expect APPROVED"
   security_scan: "python tools/validate_skill_package.py skills/asi-verifiable-engineering"
 
 required_gates:
@@ -75,6 +75,22 @@ assurance:
       - I2
       - I3
     dual_human_approval: true
+
+automated_acceptance:
+  enabled: true
+  eligible_risks:
+    - low
+    - medium
+  line_by_line_review_default: false
+  require_all_required_gates_passed: true
+  require_no_unverified: true
+  require_no_residual_risks_for_automatic: true
+  require_test_honesty: true
+  require_change_budget: true
+  require_distinct_builder_auditor: true
+  require_rollback_tested: true
+  require_policy_digest: true
+  require_diff_digest: true
 
 evidence:
   directory: ".asi/evidence"
