@@ -28,11 +28,13 @@ REQUIRED_COMMANDS = {
     "lint",
     "typecheck",
     "build",
+    "package_installability",
     "unit_tests",
     "integration_tests",
     "secret_scan",
     "dependency_scan",
     "test_honesty",
+    "rollback_check",
 }
 
 REQUIRED_GATES = {
@@ -41,10 +43,12 @@ REQUIRED_GATES = {
     "lint",
     "typecheck",
     "build",
+    "package_installability",
     "unit_tests",
     "integration_tests",
     "secret_scan",
     "dependency_scan",
+    "rollback_check",
     "independent_audit",
 }
 
