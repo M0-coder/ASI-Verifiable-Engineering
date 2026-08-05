@@ -225,9 +225,7 @@ def evaluate_change(
         )
 
     if acceptance.get("require_no_unverified") and manifest.get("unverified"):
-        blockers.append(
-            "Automatic acceptance requires an empty unverified list."
-        )
+        blockers.append("Approval requires an empty unverified list.")
 
     residual_risks = manifest.get("residual_risks")
     if (
@@ -261,6 +259,8 @@ def evaluate_change(
         if not isinstance(review, dict):
             blockers.append("Independent review metadata is required.")
         else:
+            if not review.get("auditor"):
+                blockers.append("Independent auditor identity is required.")
             if review.get("builder") == review.get("auditor"):
                 blockers.append("Builder and auditor must be distinct.")
             if review.get("same_context") is not False:
@@ -325,12 +325,20 @@ def evaluate_change(
     if automatic_eligible:
         human_action = "none"
         human_review_mode = "none"
-    elif derived_decision == "APPROVED" and risk == "high":
-        human_action = "targeted_risk_review_completed"
-        human_review_mode = "targeted"
-    elif derived_decision == "APPROVED" and risk == "critical":
-        human_action = "targeted_dual_review_completed"
+    elif risk == "critical":
         human_review_mode = "targeted_dual"
+        human_action = (
+            "targeted_dual_review_completed"
+            if derived_decision == "APPROVED"
+            else "complete_targeted_dual_review_and_resolve_blockers"
+        )
+    elif risk == "high":
+        human_review_mode = "targeted"
+        human_action = (
+            "targeted_risk_review_completed"
+            if derived_decision == "APPROVED"
+            else "complete_targeted_review_and_resolve_blockers"
+        )
     elif residual_risks or manifest.get("conditions"):
         human_action = "accept_or_reject_residual_risk"
         human_review_mode = "exception_only"
@@ -382,8 +390,8 @@ def main(argv: list[str]) -> int:
     result = evaluate_change(policy, manifest)
     print(json.dumps(result, indent=2, sort_keys=True))
 
-    if expected and result["decision"] != expected:
-        return 1
+    if expected is not None:
+        return 0 if result["decision"] == expected else 1
     return 0 if result["decision"] in {"APPROVED", "CONDITIONAL"} else 1
 
 
