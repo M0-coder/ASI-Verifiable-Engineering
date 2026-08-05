@@ -1,68 +1,124 @@
 # Instructions for agents working on this repository
 
-This repository defines a governance Skill. Treat every modification as high risk because it can weaken controls in every adopting repository.
+This repository defines a governance Skill. Treat modifications as high risk because weakening a control may affect every repository that adopts it.
 
 ## Mandatory startup
 
 1. Begin in read-only mode.
 2. Identify base, head, integrable commit, branch, and tree state.
 3. Read `skills/asi-verifiable-engineering/SKILL.md`.
-4. Read `.asi/policy.yml` and `.asi/change-budget.json`.
-5. Declare intended paths, tests, risks, stop conditions, and rollback before editing.
-6. Keep builder, reviewer, and target-observation evidence distinct and traceable.
+4. Read `skills/asi-verifiable-engineering/references/solo-operator-mode.md`.
+5. Read `.asi/policy.yml` and `.asi/change-budget.json`.
+6. Declare intended paths, tests, risk, stop conditions, rollback, and role before editing.
+
+## Role declaration
+
+Every agent must operate as exactly one role.
+
+### Builder
+
+A builder may modify files. It must use the `builder_context_id` declared by the change budget. It cannot issue the independent audit attestation, claim owner authorization, or approve its own work.
+
+### Auditor
+
+An auditor must use a different conversation or agent context and a different `auditor_context_id`.
+
+It must:
+
+- remain read-only;
+- target the exact head;
+- verify evidence and risk controls;
+- record checks and findings;
+- record `write_actions: []`;
+- block instead of fixing;
+- publish a JSON attestation linked by SHA-256.
+
+The same GitHub owner account may post the audit comment. Context identity and behavior—not username alone—establish I1.
 
 ## Approval principle
 
-Code is not approved because a human or AI read it. Approval is derived from measured evidence bound to a specific commit and package.
+Code is not approved because an AI or human read it. Approval is derived from measured evidence bound to the exact commit and package.
 
-Line-by-line review is not the default gate. Use targeted review for high risk and forensic review only when integrity, scope, binary, or contradictory-evidence signals require it.
+Line-by-line review is not the default. It activates only for forensic triggers such as integrity conflicts, forbidden paths, unexpected binaries, unbounded changes, obfuscation, or contradictory evidence.
+
+## Independence and authorization
+
+- `I1`: separate read-only AI audit context.
+- `I2`: deterministic tools and CI.
+- `I3`: external human or institutional verification for critical work.
+
+- `H0`: eligible automatic approval for low or medium risk.
+- `H1`: owner manually merges an approved high-risk head.
+- `H2`: dual human authorization for critical risk.
+
+Agents cannot claim H1 or H2.
 
 ## Prohibited actions
 
 - Do not push directly to `main`.
-- Do not merge or approve your own change.
-- Do not weaken policy, tests, CI, CODEOWNERS, thresholds, or evidence validation in the same change that benefits from the weakening.
-- Do not synthesize exit codes, durations, logs, digests, approvals, target observations, or branch-protection state.
-- Do not treat `continue-on-error` or a green step label as proof that a measured gate passed.
-- Do not use an example manifest as evidence for a real commit.
-- Do not promote T4 to T5 from review alone.
-- Do not accept target observation unless its external JSON is SHA-256 verified and matches reviewer, repository, head, environment, age, result, and package digest.
+- Do not merge or enable auto-merge.
+- Do not fabricate builder or auditor context IDs.
+- Do not use the same context for construction and audit.
+- Do not modify files during an independent audit.
+- Do not claim execution without measured results.
+- Do not synthesize exit codes, durations, logs, digests, observations, or approvals.
+- Do not weaken policy, CI, tests, CODEOWNERS, validators, or thresholds in a change that benefits from the weakening.
+- Do not convert a required failure into a warning.
+- Do not treat `continue-on-error` as evidence of a passed gate.
+- Do not use example manifests as evidence for a real commit.
+- Do not access production secrets or perform irreversible actions without explicit owner authorization.
 
-## High-risk promotion path
+## Measured execution
 
-A high-risk change requires all of the following:
-
-1. Technical gates produce E6 / T4 / I2.
-2. A distinct human collaborator approves the current head with `ASI-TARGETED-REVIEW-V1`.
-3. The approval links a valid external report using `ASI-TARGET-OBSERVATION-V1`.
-4. The report matches `assets/target-observation.example.json` and the exact package digest.
-5. Effective `main` protection passes the GitHub API check.
-6. The manifest reaches E7 / T5 / I3 with no unverified items or unresolved required gates.
-7. `evaluate_change.py` derives `APPROVED` independently of the manifest's written claim.
-
-## Required local validation
-
-The example manifest is intentionally blocked:
+Resolve commands from `.asi/policy.yml` and execute them through:
 
 ```bash
-python tools/validate_skill_package.py skills/asi-verifiable-engineering
-python skills/asi-verifiable-engineering/scripts/validate_policy.py .asi/policy.yml
-python skills/asi-verifiable-engineering/scripts/validate_evidence.py \
-  skills/asi-verifiable-engineering/assets/evidence-manifest.example.json
-python skills/asi-verifiable-engineering/scripts/evaluate_change.py \
-  .asi/policy.yml \
-  skills/asi-verifiable-engineering/assets/evidence-manifest.example.json \
-  --expect BLOCKED
-python -m unittest discover -s tests -p 'test_*.py' -v
+python skills/asi-verifiable-engineering/scripts/run_gate.py \
+  --name <gate> \
+  --output-dir <evidence-directory> \
+  --policy .asi/policy.yml \
+  --policy-key <gate>
 ```
+
+Preserve exact argv, timestamps, duration, exit code, log, result, digests, policy key, and policy digest.
+
+## Required chain
+
+The strict profile includes:
+
+- identity and change budget;
+- branch protection;
+- format, lint, and strict types;
+- package and reproducibility checks;
+- unit, integration, and adversarial tests;
+- secrets and supply-chain scans;
+- rollback rehearsal;
+- separate-context audit;
+- target-environment observation;
+- cryptographic binding validation;
+- evidence-derived decision.
+
+## Audit comment contract
+
+A valid auditor comment contains:
+
+```text
+ASI-SOLO-AUDIT-V1
+ASI-AUDIT-EVIDENCE-URL: https://raw.githubusercontent.com/...
+ASI-AUDIT-EVIDENCE-SHA256: sha256:<digest>
+```
+
+The JSON must match the repository, head, builder context, auditor context, audit mode, timestamps, and exact package digest when observation is claimed.
 
 ## Decision language
 
 Every evaluation ends with exactly one decision:
 
-- `APROBADO`
-- `APROBADO CONDICIONALMENTE`
-- `BLOQUEADO`
-- `RECHAZADO`
+- `APPROVED`
+- `CONDITIONAL`
+- `BLOCKED`
+- `REJECTED`
 
-Missing or unexecuted evidence is `NO VERIFICADO` and cannot be converted into a warning through narrative explanation.
+Missing evidence is `NO VERIFICADO`. A builder claim never overrides the derived decision.
+
+For high risk, `APPROVED` means the evidence path is ready for H1. Only the owner may perform the merge.
