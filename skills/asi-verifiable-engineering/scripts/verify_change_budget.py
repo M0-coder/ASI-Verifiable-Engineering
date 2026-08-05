@@ -10,7 +10,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 
 def git_text(root: Path, *args: str) -> str:
@@ -26,7 +26,10 @@ def git_text(root: Path, *args: str) -> str:
 
 
 def load_budget(path: Path) -> dict[str, Any]:
-    data = json.loads(path.read_text(encoding="utf-8"))
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("Change budget root must be an object.")
+    data = cast(dict[str, Any], raw)
     if data.get("version") != 1:
         raise ValueError("Change budget version must equal 1.")
     expected = data.get("expected_paths")
