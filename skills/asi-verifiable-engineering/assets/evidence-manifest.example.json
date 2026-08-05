@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "manifest_version": 1,
+  "repository": "owner/repository",
+  "branch": "feature/example",
+  "base_commit": "0000000000000000000000000000000000000000",
+  "evaluated_commit": "1111111111111111111111111111111111111111",
+  "policy_version": 1,
+  "doctrine_version": "1.2",
+  "skill_version": "0.1.0-draft.1",
+  "risk": "medium",
+  "evidence_level": "E5",
+  "assurance_level": "T4",
+  "independence": [
+    "I1",
+    "I2"
+  ],
+  "environment": {
+    "os": "example",
+    "architecture": "example",
+    "runtime": "example",
+    "package_manager": "example",
+    "lockfile_digest": "sha256:example"
+  },
+  "commands": [
+    {
+      "name": "unit_tests",
+      "command": "example-test-command",
+      "started_at": "2026-08-05T15:00:00Z",
+      "duration_seconds": 1.0,
+      "exit_code": 0,
+      "artifact": "artifacts/unit-tests.xml",
+      "artifact_digest": "sha256:example"
+    }
+  ],
+  "gates": {
+    "integrity": "passed",
+    "format_check": "passed",
+    "lint": "passed",
+    "typecheck": "not_applicable",
+    "build": "passed",
+    "unit_tests": "passed",
+    "integration_tests": "passed",
+    "security_scan": "passed",
+    "dependency_scan": "passed",
+    "independent_audit": "passed"
+  },
+  "test_honesty": {
+    "method": "fails_on_base_passes_on_head",
+    "evidence": "artifacts/test-honesty.txt"
+  },
+  "artifacts": [
+    {
+      "path": "artifacts/unit-tests.xml",
+      "digest": "sha256:example",
+      "producer": "ci"
+    }
+  ],
+  "unverified": [],
+  "residual_risks": [],
+  "decision": "CONDITIONAL",
+  "conditions": [
+    {
+      "condition": "Complete observation window",
+      "owner": "example-owner",
+      "expires_at": "2026-08-12T15:00:00Z"
+    }
+  ],
+  "rollback": {
+    "reference": "docs/rollback.md",
+    "tested": true
+  },
+  "approved_by": [
+    "example-auditor"
+  ],
+  "created_at": "2026-08-05T15:00:00Z",
+  "expires_at": "2026-08-12T15:00:00Z"
+}
