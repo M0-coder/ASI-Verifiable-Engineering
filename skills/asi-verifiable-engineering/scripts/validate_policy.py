@@ -35,6 +35,7 @@ REQUIRED_COMMANDS = {
     "dependency_scan",
     "test_honesty",
     "rollback_check",
+    "independent_audit",
 }
 
 REQUIRED_GATES = {
