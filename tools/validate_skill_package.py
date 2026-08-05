@@ -34,7 +34,9 @@ REQUIRED_PACKAGE_FILES = {
     "assets/audit-report.md",
     "assets/change-budget.md",
     "assets/evidence-manifest.example.json",
+    "assets/target-observation.example.json",
     "scripts/apply_review_attestation.py",
+    "scripts/check_branch_protection.py",
     "scripts/check_format.py",
     "scripts/collect_github_review.py",
     "scripts/evaluate_change.py",
@@ -47,16 +49,19 @@ REQUIRED_PACKAGE_FILES = {
     "scripts/validate_policy.py",
     "scripts/verify_change_budget.py",
     "scripts/verify_installability.py",
+    "scripts/verify_merged_pr.py",
     "scripts/verify_source_rollback.py",
 }
 
 REQUIRED_REPOSITORY_FILES = {
     ".asi/change-budget.json",
     ".asi/policy.yml",
+    ".github/workflows/main-integrity.yml",
     ".github/workflows/validate-skill.yml",
     "mypy.ini",
     "requirements-ci.lock",
     "tests/test_adversarial_controls.py",
+    "tests/test_birth02_promotion.py",
     "tests/test_integration_evidence.py",
     "tests/test_review_attestation.py",
 }
