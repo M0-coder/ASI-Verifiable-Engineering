@@ -3,11 +3,13 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_DIR = ROOT / "skills" / "asi-verifiable-engineering"
@@ -40,6 +42,10 @@ evidence_validator = load_module(
 decision_engine = load_module(
     "decision_engine",
     SCRIPTS_DIR / "evaluate_change.py",
+)
+evidence_generator = load_module(
+    "evidence_generator",
+    SCRIPTS_DIR / "generate_ci_evidence.py",
 )
 
 
@@ -251,6 +257,99 @@ class DecisionEngineTests(unittest.TestCase):
         self.assertFalse(result["automatic_approval_eligible"])
         self.assertFalse(result["line_by_line_review_required"])
         self.assertEqual("targeted", result["human_review_mode"])
+
+
+class EvidenceGeneratorTests(unittest.TestCase):
+    def _git(self, root: Path, *args: str) -> str:
+        return subprocess.check_output(
+            ["git", *args],
+            cwd=root,
+            text=True,
+        ).strip()
+
+    def test_generator_binds_manifest_to_real_diff(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self._git(root, "init")
+            self._git(root, "config", "user.name", "ASI Test")
+            self._git(root, "config", "user.email", "asi@example.invalid")
+
+            policy = root / "policy.yml"
+            policy.write_text(
+                "commands:\n"
+                "  unit_tests: \"python -m unittest\"\n",
+                encoding="utf-8",
+            )
+            budget = root / "budget.json"
+            budget.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "expected_paths": ["src.txt"],
+                        "rollback": "git revert",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            source = root / "src.txt"
+            source.write_text("before\n", encoding="utf-8")
+            self._git(root, "add", ".")
+            self._git(root, "commit", "-m", "base")
+            base = self._git(root, "rev-parse", "HEAD")
+
+            source.write_text("after\n", encoding="utf-8")
+            self._git(root, "add", "src.txt")
+            self._git(root, "commit", "-m", "change")
+            head = self._git(root, "rev-parse", "HEAD")
+
+            evidence_dir = root / "evidence"
+            evidence_dir.mkdir()
+            tests_log = evidence_dir / "tests.log"
+            tests_log.write_text("negative test passed\n", encoding="utf-8")
+
+            args = SimpleNamespace(
+                repository="example/repository",
+                branch="feature/test",
+                base_commit=base,
+                head_commit=head,
+                evaluated_commit=head,
+                policy=str(policy),
+                budget=str(budget),
+                output_dir=str(evidence_dir),
+                builder="builder-agent",
+                workflow_run="https://example.invalid/run/1",
+                risk="high",
+                skill_version="0.1.0-test",
+                doctrine_version="1.2",
+                tests_log=str(tests_log),
+                passed_gate=[
+                    "integrity",
+                    "unit_tests",
+                ],
+                unverified=["Independent review pending."],
+                os_name="test-os",
+                architecture="test-arch",
+                runtime="python-test",
+                validity_days=7,
+            )
+
+            previous = Path.cwd()
+            try:
+                os.chdir(root)
+                manifest = evidence_generator.generate(args)
+            finally:
+                os.chdir(previous)
+
+            self.assertEqual(["src.txt"], manifest["changed_files"])
+            self.assertTrue(manifest["change_budget"]["within_budget"])
+            self.assertEqual([], manifest["change_budget"]["unexpected_files"])
+            self.assertEqual(head, manifest["evaluated_commit"])
+            self.assertEqual(head, manifest["integrable_commit"])
+            self.assertRegex(
+                manifest["diff_digest"],
+                r"^sha256:[0-9a-f]{64}$",
+            )
+            self.assertEqual("BLOCKED", manifest["decision"])
 
 
 if __name__ == "__main__":
