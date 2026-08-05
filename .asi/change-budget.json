@@ -2,12 +2,13 @@
   "version": 1,
   "change_id": "bootstrap-v0.1.0",
   "risk": "high",
-  "objective": "Bootstrap ASI Verifiable Engineering with measured evidence, verified bindings, risk-directed review, and no default line-by-line inspection.",
+  "objective": "Bootstrap ASI Verifiable Engineering with a reachable evidence-bound T4-to-T5 promotion path and no default line-by-line inspection.",
   "expected_paths": [
     ".asi/change-budget.json",
     ".asi/policy.yml",
     ".github/CODEOWNERS",
     ".github/pull_request_template.md",
+    ".github/workflows/main-integrity.yml",
     ".github/workflows/validate-skill.yml",
     "AGENTS.md",
     "CHANGELOG.md",
@@ -28,6 +29,7 @@
     "skills/asi-verifiable-engineering/references/annex-e-automated-acceptance.md",
     "skills/asi-verifiable-engineering/references/core-doctrine.md",
     "skills/asi-verifiable-engineering/scripts/apply_review_attestation.py",
+    "skills/asi-verifiable-engineering/scripts/check_branch_protection.py",
     "skills/asi-verifiable-engineering/scripts/check_format.py",
     "skills/asi-verifiable-engineering/scripts/collect_github_review.py",
     "skills/asi-verifiable-engineering/scripts/evaluate_change.py",
@@ -40,9 +42,11 @@
     "skills/asi-verifiable-engineering/scripts/validate_policy.py",
     "skills/asi-verifiable-engineering/scripts/verify_change_budget.py",
     "skills/asi-verifiable-engineering/scripts/verify_installability.py",
+    "skills/asi-verifiable-engineering/scripts/verify_merged_pr.py",
     "skills/asi-verifiable-engineering/scripts/verify_source_rollback.py",
     "tests/__init__.py",
     "tests/test_adversarial_controls.py",
+    "tests/test_birth02_promotion.py",
     "tests/test_integration_evidence.py",
     "tests/test_policy_contract.py",
     "tests/test_review_attestation.py",
@@ -55,8 +59,8 @@
     "keys/**",
     "secrets/**"
   ],
-  "max_files": 49,
-  "max_changed_lines": 10000,
+  "max_files": 55,
+  "max_changed_lines": 12000,
   "allow_binary_files": false,
   "stop_conditions": [
     "Any changed path is absent from expected_paths.",
@@ -64,6 +68,7 @@
     "A required verification gate is weakened or disabled.",
     "A measured command differs from its policy command.",
     "The builder is presented as the independent auditor.",
+    "Target observation is not bound to the current head and package digest.",
     "An example manifest is substituted for evidence from the evaluated commit."
   ],
   "rollback": "Close pull request 1 and delete branch skill/bootstrap-v0.1.0."
