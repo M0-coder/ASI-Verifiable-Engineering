@@ -18,6 +18,7 @@ All notable changes to ASI Verifiable Engineering are recorded here.
 - Separate post-merge `main-integrity.yml` workflow that verifies the associated merged PR rather than using a synthetic PR number.
 - Tests proving self-review, bots, stale review, missing markers, altered package digests, weak branch protection, and contradictory decision claims are rejected.
 - A complete high-risk fixture proving that the engine can derive `APPROVED` from E7 / T5 / I3 evidence.
+- Regression tests preserving E6 / T4 when only external governance gates are pending and downgrading when a technical gate fails.
 
 ### Changed
 
@@ -27,6 +28,7 @@ All notable changes to ASI Verifiable Engineering are recorded here.
 - The written manifest decision is informational and cannot veto or manufacture the independently derived result.
 - Pull-request and post-merge verification now use separate event semantics.
 - The blocked example is documented with `--expect BLOCKED`.
+- External branch protection, independent review, and target observation remain blocking gates without erasing valid E6 / T4 technical evidence.
 
 ### Corrected
 
@@ -35,6 +37,7 @@ All notable changes to ASI Verifiable Engineering are recorded here.
 - Prevented stale integrable states from being accepted.
 - Added a reachable path beyond T4 instead of declaring permanent installation and protection blockers.
 - Removed the invalid PR-number-zero path from `push` verification.
+- Synchronized the primary Skill with evidence-derived decision authority and the target-observation contract.
 
 ## [0.1.0-draft.1] - 2026-08-05
 
