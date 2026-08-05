@@ -3,7 +3,7 @@ version: 1
 doctrine:
   name: ASI Verifiable Engineering
   version: "1.2"
-  skill_version: "0.1.0-draft.3"
+  skill_version: "0.1.0-draft.2"
   source: "skills/asi-verifiable-engineering/SKILL.md"
 
 repository:
