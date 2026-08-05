@@ -19,6 +19,7 @@ jobs:
       PYTHONPYCACHEPREFIX: /tmp/asi-pycache
       ASI_REPOSITORY: ${{ github.repository }}
       ASI_MERGED_COMMIT: ${{ github.sha }}
+      GITHUB_TOKEN: ${{ github.token }}
 
     steps:
       - name: Check out exact main commit
@@ -32,6 +33,21 @@ jobs:
         with:
           python-version: "3.12"
           cache: ""
+
+      - name: Resolve builder context
+        run: |
+          set -euo pipefail
+          builder_context_id="$(python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('.asi/change-budget.json').read_text(encoding='utf-8'))
+          value = data.get('builder_context_id')
+          if not isinstance(value, str) or not value.strip():
+              raise SystemExit('builder_context_id is required')
+          print(value)
+          PY
+          )"
+          printf 'ASI_BUILDER_CONTEXT_ID=%s\n' "$builder_context_id" >> "$GITHUB_ENV"
 
       - name: Install pinned CI toolchain
         run: >-
@@ -61,9 +77,7 @@ jobs:
           ASI_PROTECTED_BRANCH: main
         run: python skills/asi-verifiable-engineering/scripts/check_branch_protection.py
 
-      - name: Verify merged PR attestations
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+      - name: Verify merged PR audit, observation, and owner authorization
         run: python skills/asi-verifiable-engineering/scripts/verify_merged_pr.py
 
       - name: Confirm exact and clean main state
