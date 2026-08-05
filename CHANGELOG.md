@@ -45,6 +45,14 @@ All notable changes to ASI Verifiable Engineering are recorded here.
 - Removed the invalid PR-number-zero path from `push` verification.
 - Synchronized the Skill, README, agent instructions, policy template, and observation example with Solo-Operator Mode.
 
+### Verified state
+
+- Workflow run `31045493029` evaluated head `cba0bd5c50d36e3cb373894c11fa6a2a614dee56` and integrable commit `d8df9399e94a1dacda5f55ca69a430c8edeb2ff0`.
+- All internal technical gates passed.
+- 36 tests passed.
+- Evidence reached E6/T4/I2.
+- Branch protection, separate-context audit, and target observation remained the only failed gates.
+
 ## [0.1.0-draft.1] - 2026-08-05
 
 ### Added
