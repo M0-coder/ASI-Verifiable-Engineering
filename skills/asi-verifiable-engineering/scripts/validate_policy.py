@@ -24,6 +24,7 @@ REQUIRED_SECTIONS = {
 REQUIRED_COMMANDS = {
     "install",
     "integrity",
+    "branch_protection",
     "format_check",
     "lint",
     "typecheck",
@@ -36,10 +37,12 @@ REQUIRED_COMMANDS = {
     "test_honesty",
     "rollback_check",
     "independent_audit",
+    "target_environment_observation",
 }
 
 REQUIRED_GATES = {
     "integrity",
+    "branch_protection",
     "format_check",
     "lint",
     "typecheck",
@@ -51,6 +54,7 @@ REQUIRED_GATES = {
     "dependency_scan",
     "rollback_check",
     "independent_audit",
+    "target_environment_observation",
 }
 
 FALSE_AGENT_PERMISSIONS = {
