@@ -32,44 +32,36 @@ applier = load_module(
 )
 
 HEAD = "a" * 40
-BUILDER = "builder-user"
-REVIEWER = "independent-reviewer"
+BUILDER_CONTEXT = "builder-context-01"
+AUDITOR_CONTEXT = "auditor-context-02"
 REPOSITORY = "owner/repository"
 PACKAGE_DIGEST = "sha256:" + "3" * 64
 EVIDENCE_DIGEST = "sha256:" + "4" * 64
-EVIDENCE_URL = "https://raw.githubusercontent.com/reviewer/evidence/main/report.json"
-REVIEW_MARKER = "ASI-TARGETED-REVIEW-V1"
-OBSERVATION_MARKER = "ASI-TARGET-OBSERVATION-V1"
+EVIDENCE_URL = "https://raw.githubusercontent.com/owner/evidence/main/audit.json"
+MARKER = "ASI-SOLO-AUDIT-V1"
 
 
-def review_body(include_observation: bool = False) -> str:
-    lines = [REVIEW_MARKER]
-    if include_observation:
-        lines.extend(
-            [
-                OBSERVATION_MARKER,
-                f"ASI-TARGET-EVIDENCE-URL: {EVIDENCE_URL}",
-                f"ASI-TARGET-EVIDENCE-SHA256: {EVIDENCE_DIGEST}",
-            ]
-        )
-    return "\n".join(lines)
+def review_body() -> str:
+    return "\n".join(
+        [
+            MARKER,
+            f"ASI-AUDIT-EVIDENCE-URL: {EVIDENCE_URL}",
+            f"ASI-AUDIT-EVIDENCE-SHA256: {EVIDENCE_DIGEST}",
+        ]
+    )
 
 
 def review(
     review_id: int,
-    reviewer: str,
-    state: str = "APPROVED",
+    state: str = "COMMENTED",
     commit_id: str = HEAD,
     body: str | None = None,
     account_type: str = "User",
-    association: str = "COLLABORATOR",
+    association: str = "OWNER",
 ) -> dict[str, object]:
     return {
         "id": review_id,
-        "user": {
-            "login": reviewer,
-            "type": account_type,
-        },
+        "user": {"login": "owner", "type": account_type},
         "state": state,
         "commit_id": commit_id,
         "body": body if body is not None else review_body(),
@@ -79,112 +71,111 @@ def review(
     }
 
 
-def observation() -> dict[str, object]:
-    return {
-        "observation_version": 1,
+def attestation(
+    auditor_context: str = AUDITOR_CONTEXT,
+    include_observation: bool = True,
+) -> dict[str, object]:
+    result: dict[str, object] = {
+        "attestation_version": 1,
+        "operator_mode": "solo",
         "repository": REPOSITORY,
         "head_commit": HEAD,
-        "reviewer": REVIEWER,
-        "target_environment": "codex",
-        "package_digest": PACKAGE_DIGEST,
-        "result": "passed",
-        "executed_at": datetime.now(timezone.utc).isoformat(),
-        "checks": [
-            "Skill loaded from the verified package.",
-            "Read-only startup protocol executed.",
-            "Decision output matched the expected contract.",
-        ],
-        "limitations": [],
+        "builder_context_id": BUILDER_CONTEXT,
+        "auditor_context_id": auditor_context,
+        "audit": {
+            "mode": "read_only",
+            "result": "passed",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "checks": [
+                "Commit identity verified.",
+                "Policy gates inspected.",
+                "Evidence bindings reproduced.",
+            ],
+            "findings": [],
+            "write_actions": [],
+        },
     }
+    if include_observation:
+        result["target_observation"] = {
+            "target_environment": "codex",
+            "package_digest": PACKAGE_DIGEST,
+            "result": "passed",
+            "executed_at": datetime.now(timezone.utc).isoformat(),
+            "checks": ["Skill loaded.", "Read-only protocol executed."],
+            "limitations": [],
+        }
+    return result
 
 
-class ReviewCollectorTests(unittest.TestCase):
-    def test_valid_independent_targeted_approval_passes(self) -> None:
+class SoloAuditCollectorTests(unittest.TestCase):
+    def test_same_github_owner_can_submit_distinct_context_audit(self) -> None:
         result = collector.evaluate_reviews(
-            [review(1, REVIEWER)],
-            BUILDER,
+            [review(1)],
+            BUILDER_CONTEXT,
             HEAD,
             REPOSITORY,
-        )
-        self.assertTrue(result["passed"])
-        self.assertFalse(result["observation_passed"])
-        self.assertEqual(REVIEWER, result["approvals"][0]["reviewer"])
-
-    def test_valid_external_observation_is_verified(self) -> None:
-        result = collector.evaluate_reviews(
-            [review(1, REVIEWER, body=review_body(include_observation=True))],
-            BUILDER,
-            HEAD,
-            REPOSITORY,
-            observation_loader=lambda _url, _digest: observation(),
+            evidence_loader=lambda _url, _digest: attestation(),
         )
         self.assertTrue(result["passed"])
         self.assertTrue(result["observation_passed"])
-        self.assertEqual("codex", result["observations"][0]["target_environment"])
+        self.assertEqual(AUDITOR_CONTEXT, result["audits"][0]["auditor_context_id"])
 
-    def test_builder_cannot_approve_own_change(self) -> None:
+    def test_same_context_is_rejected(self) -> None:
         result = collector.evaluate_reviews(
-            [review(1, BUILDER)],
-            BUILDER,
+            [review(1)],
+            BUILDER_CONTEXT,
             HEAD,
             REPOSITORY,
+            evidence_loader=lambda _url, _digest: attestation(BUILDER_CONTEXT),
         )
         self.assertFalse(result["passed"])
         self.assertIn(
-            "reviewer_is_the_builder",
-            result["rejected_latest_reviews"][0]["reasons"],
+            "auditor_context_must_differ_from_builder_context",
+            result["rejected_audits"][0]["reasons"],
         )
 
-    def test_stale_approval_is_rejected(self) -> None:
+    def test_write_action_is_rejected(self) -> None:
+        evidence = attestation()
+        evidence["audit"]["write_actions"] = ["modified source.py"]
         result = collector.evaluate_reviews(
-            [review(1, REVIEWER, commit_id="b" * 40)],
-            BUILDER,
+            [review(1)],
+            BUILDER_CONTEXT,
             HEAD,
             REPOSITORY,
+            evidence_loader=lambda _url, _digest: evidence,
         )
         self.assertFalse(result["passed"])
         self.assertIn(
-            "review_is_stale_for_current_head",
-            result["rejected_latest_reviews"][0]["reasons"],
+            "audit_write_actions_must_be_empty",
+            result["rejected_audits"][0]["reasons"],
         )
 
-    def test_bot_and_missing_marker_are_rejected(self) -> None:
+    def test_stale_comment_is_rejected(self) -> None:
         result = collector.evaluate_reviews(
-            [
-                review(
-                    1,
-                    "review-bot",
-                    body="looks good",
-                    account_type="Bot",
-                )
-            ],
-            BUILDER,
+            [review(1, commit_id="b" * 40)],
+            BUILDER_CONTEXT,
+            HEAD,
+            REPOSITORY,
+            evidence_loader=lambda _url, _digest: attestation(),
+        )
+        self.assertFalse(result["passed"])
+        self.assertIn(
+            "audit_is_stale_for_current_head",
+            result["rejected_audits"][0]["reasons"],
+        )
+
+    def test_missing_marker_is_ignored(self) -> None:
+        result = collector.evaluate_reviews(
+            [review(1, body="ordinary review")],
+            BUILDER_CONTEXT,
             HEAD,
             REPOSITORY,
         )
         self.assertFalse(result["passed"])
-        reasons = result["rejected_latest_reviews"][0]["reasons"]
-        self.assertIn("reviewer_is_not_a_human_user_account", reasons)
-        self.assertIn("targeted_review_marker_is_missing", reasons)
-
-    def test_later_changes_requested_invalidates_prior_approval(self) -> None:
-        result = collector.evaluate_reviews(
-            [
-                review(1, REVIEWER, state="APPROVED"),
-                review(2, REVIEWER, state="CHANGES_REQUESTED"),
-            ],
-            BUILDER,
-            HEAD,
-            REPOSITORY,
-        )
-        self.assertFalse(result["passed"])
-        self.assertEqual(
-            "CHANGES_REQUESTED",
-            result["rejected_latest_reviews"][0]["state"],
-        )
+        self.assertEqual([], result["rejected_audits"])
 
 
-class ReviewApplicationTests(unittest.TestCase):
+class SoloAuditApplicationTests(unittest.TestCase):
     def manifest(self) -> dict[str, object]:
         commands = []
         gate_evidence: dict[str, object] = {}
@@ -212,11 +203,9 @@ class ReviewApplicationTests(unittest.TestCase):
             "head_commit": HEAD,
             "evidence_level": "E6",
             "assurance_level": "T4",
-            "package_installability": {
-                "archive_digest": PACKAGE_DIGEST,
-            },
+            "package_installability": {"archive_digest": PACKAGE_DIGEST},
             "review": {
-                "builder": BUILDER,
+                "builder": BUILDER_CONTEXT,
                 "auditor": None,
                 "same_context": False,
                 "human_review": {
@@ -239,66 +228,68 @@ class ReviewApplicationTests(unittest.TestCase):
             ],
             "residual_risks": [
                 "Independent targeted human review has not been completed.",
-                "The Skill has not been installed in the target environment.",
+                "The Skill has not been observed in the target environment.",
             ],
         }
 
-    def review_report(self) -> dict[str, object]:
+    def audit_report(self) -> dict[str, object]:
+        evidence = attestation(include_observation=False)
+        evidence.update({"actor": "owner", "review_id": 1})
         return {
             "passed": True,
-            "builder": BUILDER,
+            "builder_context_id": BUILDER_CONTEXT,
             "head_commit": HEAD,
-            "approvals": [
-                {
-                    "reviewer": REVIEWER,
-                    "commit_id": HEAD,
-                    "review_id": 1,
-                }
-            ],
+            "audits": [evidence],
         }
 
     def observation_report(self, package_digest: str = PACKAGE_DIGEST) -> dict[str, object]:
-        item = observation()
-        item["package_digest"] = package_digest
+        item = {
+            "repository": REPOSITORY,
+            "head_commit": HEAD,
+            "auditor_context_id": AUDITOR_CONTEXT,
+            "target_environment": "codex",
+            "package_digest": package_digest,
+            "result": "passed",
+            "executed_at": datetime.now(timezone.utc).isoformat(),
+            "checks": ["Skill loaded."],
+        }
         return {
             "observation_passed": True,
             "head_commit": HEAD,
             "observations": [item],
         }
 
-    def test_review_without_observation_promotes_only_independence(self) -> None:
-        manifest = self.manifest()
+    def test_audit_adds_i1_not_i3(self) -> None:
         updated = applier.apply_attestations(
-            manifest,
-            self.review_report(),
+            self.manifest(),
+            self.audit_report(),
             {"observation_passed": False},
         )
-        self.assertIn("I3", updated["independence"])
-        self.assertEqual("T4", updated["assurance_level"])
-        self.assertEqual("E6", updated["evidence_level"])
+        self.assertIn("I1", updated["independence"])
+        self.assertNotIn("I3", updated["independence"])
+        self.assertEqual(AUDITOR_CONTEXT, updated["review"]["auditor"])
+        self.assertEqual("owner_merge", updated["review"]["human_review"]["mode"])
 
-    def test_matching_observation_promotes_to_t5_e7(self) -> None:
-        manifest = self.manifest()
+    def test_observation_promotes_to_t5_e7(self) -> None:
         updated = applier.apply_attestations(
-            manifest,
-            self.review_report(),
+            self.manifest(),
+            self.audit_report(),
             self.observation_report(),
         )
         self.assertEqual("T5", updated["assurance_level"])
         self.assertEqual("E7", updated["evidence_level"])
-        self.assertEqual("codex", updated["operational_observation"]["target_environment"])
         self.assertEqual([], updated["unverified"])
         self.assertEqual([], updated["residual_risks"])
 
-    def test_observation_for_different_package_is_rejected(self) -> None:
+    def test_wrong_package_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
             applier.apply_attestations(
                 self.manifest(),
-                self.review_report(),
+                self.audit_report(),
                 self.observation_report("sha256:" + "9" * 64),
             )
 
-    def test_failed_review_report_does_not_change_manifest(self) -> None:
+    def test_failed_audit_does_not_change_manifest(self) -> None:
         manifest = self.manifest()
         original = copy.deepcopy(manifest)
         updated = applier.apply_attestations(
