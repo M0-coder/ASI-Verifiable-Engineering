@@ -22,6 +22,7 @@
     "skills/asi-verifiable-engineering/assets/change-budget.md",
     "skills/asi-verifiable-engineering/assets/evidence-manifest.example.json",
     "skills/asi-verifiable-engineering/assets/policy.example.yml",
+    "skills/asi-verifiable-engineering/assets/target-observation.example.json",
     "skills/asi-verifiable-engineering/references/annex-a-ai-code.md",
     "skills/asi-verifiable-engineering/references/annex-b-assurance.md",
     "skills/asi-verifiable-engineering/references/annex-c-control-matrix.md",
@@ -59,7 +60,7 @@
     "keys/**",
     "secrets/**"
   ],
-  "max_files": 55,
+  "max_files": 56,
   "max_changed_lines": 12000,
   "allow_binary_files": false,
   "stop_conditions": [
