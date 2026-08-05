@@ -36,6 +36,7 @@ REQUIRED_PACKAGE_FILES = {
     "assets/evidence-manifest.example.json",
     "scripts/check_format.py",
     "scripts/evaluate_change.py",
+    "scripts/finalize_measured_evidence.py",
     "scripts/generate_ci_evidence.py",
     "scripts/run_gate.py",
     "scripts/scan_secrets.py",
@@ -43,6 +44,8 @@ REQUIRED_PACKAGE_FILES = {
     "scripts/validate_evidence.py",
     "scripts/validate_policy.py",
     "scripts/verify_change_budget.py",
+    "scripts/verify_installability.py",
+    "scripts/verify_source_rollback.py",
 }
 
 REQUIRED_REPOSITORY_FILES = {
