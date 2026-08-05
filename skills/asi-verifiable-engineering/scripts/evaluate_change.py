@@ -274,11 +274,7 @@ def evaluate_change(
     if manifest.get("integrable_commit") != manifest.get("evaluated_commit"):
         blockers.append("integrable_commit must equal evaluated_commit.")
 
-    human_review = (
-        review.get("human_review", {})
-        if isinstance(review, dict)
-        else {}
-    )
+    human_review = review.get("human_review", {}) if isinstance(review, dict) else {}
     if risk in {"high", "critical"}:
         expected_mode = "targeted_dual" if risk == "critical" else "targeted"
         if human_review.get("completed") is not True:
@@ -289,18 +285,17 @@ def evaluate_change(
     claimed_decision = manifest.get("decision")
     if blockers:
         derived_decision = "BLOCKED"
-    elif residual_risks or manifest.get("conditions"):
-        derived_decision = "CONDITIONAL"
     elif claimed_decision == "REJECTED":
         derived_decision = "REJECTED"
+    elif residual_risks or manifest.get("conditions"):
+        derived_decision = "CONDITIONAL"
     else:
         derived_decision = "APPROVED"
 
     if claimed_decision != derived_decision:
-        blockers.append(
-            f"Claimed decision {claimed_decision!r} does not match derived decision {derived_decision!r}."
+        notes.append(
+            f"Manifest claimed {claimed_decision!r}; engine independently derived {derived_decision!r}."
         )
-        derived_decision = "BLOCKED"
 
     automatic_eligible = (
         acceptance.get("enabled") is True
@@ -341,6 +336,7 @@ def evaluate_change(
 
     return {
         "decision": derived_decision,
+        "claimed_decision": claimed_decision,
         "automatic_approval_eligible": automatic_eligible,
         "approval_basis": "policy_and_verified_primary_evidence",
         "line_by_line_review_required": line_by_line_required,
