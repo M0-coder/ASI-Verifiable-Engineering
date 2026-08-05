@@ -36,6 +36,7 @@ commands:
   dependency_scan: "python skills/asi-verifiable-engineering/scripts/scan_supply_chain.py ."
   test_honesty: "python -m unittest tests.test_adversarial_controls -v"
   rollback_check: "python skills/asi-verifiable-engineering/scripts/verify_source_rollback.py"
+  independent_audit: "python skills/asi-verifiable-engineering/scripts/collect_github_review.py"
 
 required_gates:
   integrity: true
