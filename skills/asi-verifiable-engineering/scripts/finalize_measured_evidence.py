@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 
 def _measured_gate(manifest: dict[str, Any], name: str) -> dict[str, Any]:
@@ -29,7 +29,7 @@ def _measured_gate(manifest: dict[str, Any], name: str) -> dict[str, Any]:
     )
     if not isinstance(command, dict) or command.get("exit_code") != 0:
         raise ValueError(f"Gate {name} has no successful measured command.")
-    item = evidence[name]
+    item = cast(dict[str, Any], evidence[name])
     for field in (
         "result_artifact",
         "result_digest",
