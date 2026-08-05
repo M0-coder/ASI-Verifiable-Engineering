@@ -90,6 +90,7 @@ class AdversarialControlTests(unittest.TestCase):
 
             budget = {
                 "version": 1,
+                "builder_context_id": "builder-context-test",
                 "expected_paths": ["keys/secret.txt"],
                 "forbidden_paths": ["keys/**"],
                 "max_files": 2,
