@@ -24,6 +24,7 @@ repository:
 commands:
   install: "REPLACE_WITH_PINNED_INSTALL_COMMAND"
   integrity: "REPLACE_WITH_CHANGE_BUDGET_COMMAND"
+  branch_protection: "REPLACE_WITH_BRANCH_PROTECTION_API_CHECK"
   format_check: "REPLACE_WITH_FORMAT_CHECK_COMMAND"
   lint: "REPLACE_WITH_LINT_COMMAND"
   typecheck: "REPLACE_WITH_STRICT_TYPECHECK_COMMAND"
@@ -36,9 +37,11 @@ commands:
   test_honesty: "REPLACE_WITH_ADVERSARIAL_TEST_COMMAND"
   rollback_check: "REPLACE_WITH_ROLLBACK_REHEARSAL_COMMAND"
   independent_audit: "REPLACE_WITH_INDEPENDENT_REVIEW_ATTESTATION_COMMAND"
+  target_environment_observation: "REPLACE_WITH_TARGET_OBSERVATION_ATTESTATION_COMMAND"
 
 required_gates:
   integrity: true
+  branch_protection: true
   format_check: true
   lint: true
   typecheck: true
@@ -50,6 +53,7 @@ required_gates:
   dependency_scan: true
   rollback_check: true
   independent_audit: true
+  target_environment_observation: true
 
 risk_escalation:
   high:
