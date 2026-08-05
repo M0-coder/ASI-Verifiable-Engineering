@@ -10,7 +10,6 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from pathlib import Path
 from typing import Any, cast
 
 REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
