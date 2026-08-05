@@ -1,62 +1,67 @@
 # ASI Verifiable Engineering
 
-**Status:** bootstrap draft (`0.1.0-draft.2`). Do not treat this branch as adopted policy until the draft pull request is reviewed and merged.
+**Status:** bootstrap draft (`0.1.0-draft.2`). Do not treat this branch as adopted policy until the pull request is independently verified, merged, and tagged.
 
-ASI Verifiable Engineering is an Agent Skill for auditing, modifying, verifying, and approving software changes through evidence rather than trust. It combines test-driven development, risk-based approval, independent review, reproducible CI, security controls, evidence-derived decisions, operational observation, and rollback.
+ASI Verifiable Engineering is an Agent Skill and verification framework for approving software changes through measured evidence rather than trust or exhaustive manual reading.
 
 ## Core rule
 
-Code is not approved because a human or an AI read it and found it convincing. A specific commit is approved only when it survives the controls required for its risk level and an independent decision engine derives approval from evidence tied to that exact commit.
+A change is not approved because a human or AI read it, explained it, or wrote `APPROVED`. A specific integrable commit is approved only when the decision engine derives that result from evidence bound to the exact policy, diff, commands, artifacts, package, review, and target observation.
 
-## Operational objective
+Line-by-line review is not the default gate. High-risk changes require targeted human review. Forensic reading activates only when integrity, scope, binary, or contradictory-evidence signals require it.
 
-The owner should not need to inspect every line produced by an AI.
+## Assurance path
 
-The normal approval path replaces exhaustive manual reading with:
+The pull-request workflow has an explicit reachable path:
 
-- observable acceptance criteria;
-- TDD or equivalent defect-detection evidence;
-- a declared change budget;
-- mandatory deterministic gates;
-- digest-bound policy, diff, commands, and artifacts;
-- independent builder and auditor contexts;
-- evidence that tests detect the defect;
-- risk-based E/T/I requirements;
-- tested rollback;
-- a machine-derived final decision.
+1. Technical and security gates produce E6 / T4 / I2.
+2. A human collaborator distinct from the builder approves the current head with `ASI-TARGETED-REVIEW-V1`, producing I3.
+3. The same approval may link an external target-environment report with `ASI-TARGET-OBSERVATION-V1`.
+4. CI downloads that report from GitHub Raw, verifies its SHA-256, age, reviewer, repository, head, target environment, result, and package digest.
+5. A valid observation promotes the manifest to E7 / T5.
+6. Effective `main` protection is verified through the GitHub API.
+7. `evaluate_change.py` independently derives the final decision. The manifest's written decision remains non-authoritative.
 
-Low- and medium-risk changes may become automatically eligible when every strict condition passes. High- and critical-risk changes require targeted human risk review, not automatic line-by-line inspection.
+## Target observation contract
 
-## Repository layout
+The independent reviewer executes the exact verified package in `chatgpt`, `codex`, or `openai-api`, creates a JSON report following:
 
 ```text
-skills/asi-verifiable-engineering/
-├── SKILL.md
-├── references/
-├── assets/
-└── scripts/
-
-.asi/policy.yml
-.github/workflows/validate-skill.yml
-tools/validate_skill_package.py
-tests/
+skills/asi-verifiable-engineering/assets/target-observation.example.json
 ```
 
-The installable skill directory is `skills/asi-verifiable-engineering/`. This directory name intentionally matches the `name` field in `SKILL.md`, as required by the Agent Skills specification.
+The report must be publicly retrievable through `raw.githubusercontent.com`. The approval body must contain:
 
-## Authority during bootstrap
+```text
+ASI-TARGETED-REVIEW-V1
+ASI-TARGET-OBSERVATION-V1
+ASI-TARGET-EVIDENCE-URL: https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>.json
+ASI-TARGET-EVIDENCE-SHA256: sha256:<64-lowercase-hex>
+```
 
-Until this draft is reviewed, merged, and tagged:
+The observation expires after seven days and is invalidated by any head or package-digest change.
 
-1. Notion doctrine version `1.2` remains the adopted source.
-2. This repository is the candidate canonical, version-controlled implementation.
-3. After adoption, a tagged GitHub release becomes the normative source and Notion becomes the human-readable mirror.
+## Branch protection prerequisite
 
-Notion source used for this bootstrap:
+The repository secret `ASI_GITHUB_ADMIN_TOKEN` must contain a fine-grained token with read access to repository administration metadata. CI verifies that `main` requires:
 
-- https://app.notion.com/p/3b3eb559c05c81b5b971ee384164aa10
+- at least one approval;
+- stale-review dismissal;
+- CODEOWNERS review;
+- strict required status checks;
+- `Verify measured gates and derive decision`;
+- admin enforcement;
+- conversation resolution;
+- no force pushes or deletion.
+
+## Workflows
+
+- `.github/workflows/validate-skill.yml` evaluates pull requests and review events.
+- `.github/workflows/main-integrity.yml` evaluates commits after merge and verifies the associated PR attestations. It does not invent a synthetic PR number.
 
 ## Validation
+
+The blocked example must remain blocked:
 
 ```bash
 python tools/validate_skill_package.py skills/asi-verifiable-engineering
@@ -66,34 +71,45 @@ python skills/asi-verifiable-engineering/scripts/validate_evidence.py \
 python skills/asi-verifiable-engineering/scripts/evaluate_change.py \
   .asi/policy.yml \
   skills/asi-verifiable-engineering/assets/evidence-manifest.example.json \
-  --expect APPROVED
-python -m unittest discover -s tests -v
+  --expect BLOCKED
+python -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-## Decision authority
+`tests/test_birth02_promotion.py` constructs complete high-risk E7 / T5 / I3 evidence and proves that the engine can derive `APPROVED` even when the manifest still claims `BLOCKED`.
 
-The `decision` field inside an evidence manifest is only a claim. `evaluate_change.py` independently derives the result from policy and primary evidence.
+## Repository layout
 
-A claimed approval is blocked when any required gate fails, the assurance level is too low, evidence is missing, the budget is exceeded, builder and auditor are not independent, rollback is untested, or the claim conflicts with the derived decision.
+```text
+.asi/
+├── policy.yml
+└── change-budget.json
 
-The engine reports:
+.github/workflows/
+├── validate-skill.yml
+└── main-integrity.yml
 
-- `decision`;
-- `automatic_approval_eligible`;
-- `line_by_line_review_required`;
-- `human_review_mode`;
-- `human_action`;
-- blockers and notes.
+skills/asi-verifiable-engineering/
+├── SKILL.md
+├── references/
+├── assets/
+└── scripts/
 
-## Skill behavior
+tests/
+tools/
+```
 
-The skill begins in read-only mode, fixes the repository baseline, classifies risk, declares a change budget, requires a failing test or equivalent evidence before correction, executes applicable gates, preserves primary artifacts, requires independent verification, derives the decision, and returns exactly one result:
+## Authority during bootstrap
 
-- `APROBADO`
-- `APROBADO CONDICIONALMENTE`
-- `BLOQUEADO`
-- `RECHAZADO`
+Until this draft is adopted:
+
+1. Notion doctrine version `1.2` remains the adopted source.
+2. This repository is the candidate canonical implementation.
+3. A tagged GitHub release becomes normative only after explicit adoption.
+
+Notion source:
+
+- https://app.notion.com/p/3b3eb559c05c81b5b971ee384164aa10
 
 ## Non-goals
 
-This skill does not make an AI infallible, replace CI, eliminate targeted human approval for high-risk work, or prove the absence of every possible defect. It removes line-by-line review as the default approval mechanism; it does not remove risk governance.
+The Skill does not make an AI infallible, prove the absence of every defect, or remove targeted human governance for high-risk work. It makes approval claims measurable, reproducible, independently reviewable, and difficult to falsify.
