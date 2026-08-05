@@ -6,19 +6,35 @@ All notable changes to ASI Verifiable Engineering are recorded here.
 
 ### Added
 
-- Evidence-derived decision engine: `evaluate_change.py`.
-- Strict automated-acceptance policy for low- and medium-risk changes.
-- Explicit objective of approval without default line-by-line review.
-- Annex E defining targeted human review and forensic-only exhaustive reading.
-- Commit, policy, diff, gate, artifact, budget, test-honesty, and reviewer bindings in the evidence manifest.
-- Regression tests proving that deceptive `APPROVED` claims are blocked.
+- Evidence-derived decision engine that does not trust the manifest's claimed decision.
+- Measured gate results with timestamps, durations, exit codes, logs, and digests.
+- Cryptographic recomputation of policy, diff, changed files, results, and artifacts.
+- Change-budget enforcement with forbidden paths, binary detection, and size limits.
+- Dedicated format, lint, type, secret, supply-chain, rollback, and package controls.
+- Independent GitHub review attestation bound to the current head.
+- BIRTH-02 target-environment observation contract bound to reviewer, head, package digest, age, and external SHA-256 evidence.
+- Explicit E6 / T4 / I2 to E7 / T5 / I3 promotion path.
+- GitHub API verification of effective `main` protection.
+- Separate post-merge `main-integrity.yml` workflow that verifies the associated merged PR rather than using a synthetic PR number.
+- Tests proving self-review, bots, stale review, missing markers, altered package digests, weak branch protection, and contradictory decision claims are rejected.
+- A complete high-risk fixture proving that the engine can derive `APPROVED` from E7 / T5 / I3 evidence.
 
 ### Changed
 
-- Required gates can no longer be disabled in the strict policy profile.
-- Evidence validation now requires digest-bound primary artifacts and distinct builder/auditor contexts.
-- CI now derives the approval result rather than trusting the manifest decision field.
-- High- and critical-risk review is defined as targeted risk review, not automatic full line-by-line reading.
+- Line-by-line review is no longer the normal approval gate.
+- High-risk review is targeted; forensic review activates only from concrete integrity or scope signals.
+- A human approval alone produces I3 but cannot produce T5.
+- The written manifest decision is informational and cannot veto or manufacture the independently derived result.
+- Pull-request and post-merge verification now use separate event semantics.
+- The blocked example is documented with `--expect BLOCKED`.
+
+### Corrected
+
+- Removed circular evidence and synthesized command results.
+- Replaced nominal security scans with dedicated controls.
+- Prevented stale integrable states from being accepted.
+- Added a reachable path beyond T4 instead of declaring permanent installation and protection blockers.
+- Removed the invalid PR-number-zero path from `push` verification.
 
 ## [0.1.0-draft.1] - 2026-08-05
 
