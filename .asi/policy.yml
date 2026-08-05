@@ -25,6 +25,7 @@ repository:
 commands:
   install: "python -m pip install --disable-pip-version-check --no-deps -r requirements-ci.lock"
   integrity: "python skills/asi-verifiable-engineering/scripts/verify_change_budget.py --budget .asi/change-budget.json"
+  branch_protection: "python skills/asi-verifiable-engineering/scripts/check_branch_protection.py"
   format_check: "python skills/asi-verifiable-engineering/scripts/check_format.py ."
   lint: "python -m ruff check ."
   typecheck: "python -m mypy --config-file mypy.ini tools skills/asi-verifiable-engineering/scripts"
@@ -36,10 +37,12 @@ commands:
   dependency_scan: "python skills/asi-verifiable-engineering/scripts/scan_supply_chain.py ."
   test_honesty: "python -m unittest tests.test_adversarial_controls -v"
   rollback_check: "python skills/asi-verifiable-engineering/scripts/verify_source_rollback.py"
-  independent_audit: "python skills/asi-verifiable-engineering/scripts/collect_github_review.py"
+  independent_audit: "python skills/asi-verifiable-engineering/scripts/collect_github_review.py --require-review"
+  target_environment_observation: "python skills/asi-verifiable-engineering/scripts/collect_github_review.py --require-observation"
 
 required_gates:
   integrity: true
+  branch_protection: true
   format_check: true
   lint: true
   typecheck: true
@@ -51,6 +54,7 @@ required_gates:
   dependency_scan: true
   rollback_check: true
   independent_audit: true
+  target_environment_observation: true
 
 risk_escalation:
   high:
