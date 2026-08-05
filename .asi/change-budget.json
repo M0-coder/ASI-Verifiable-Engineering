@@ -27,7 +27,9 @@
     "skills/asi-verifiable-engineering/references/annex-d-policy-as-code.md",
     "skills/asi-verifiable-engineering/references/annex-e-automated-acceptance.md",
     "skills/asi-verifiable-engineering/references/core-doctrine.md",
+    "skills/asi-verifiable-engineering/scripts/apply_review_attestation.py",
     "skills/asi-verifiable-engineering/scripts/check_format.py",
+    "skills/asi-verifiable-engineering/scripts/collect_github_review.py",
     "skills/asi-verifiable-engineering/scripts/evaluate_change.py",
     "skills/asi-verifiable-engineering/scripts/finalize_measured_evidence.py",
     "skills/asi-verifiable-engineering/scripts/generate_ci_evidence.py",
@@ -51,8 +53,8 @@
     "keys/**",
     "secrets/**"
   ],
-  "max_files": 45,
-  "max_changed_lines": 9000,
+  "max_files": 47,
+  "max_changed_lines": 9500,
   "allow_binary_files": false,
   "stop_conditions": [
     "Any changed path is absent from expected_paths.",
