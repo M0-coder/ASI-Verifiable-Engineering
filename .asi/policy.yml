@@ -3,7 +3,7 @@ version: 1
 doctrine:
   name: ASI Verifiable Engineering
   version: "1.2"
-  skill_version: "0.1.0-draft.2"
+  skill_version: "0.1.0-draft.3"
   source: "skills/asi-verifiable-engineering/SKILL.md"
 
 repository:
@@ -14,22 +14,28 @@ repository:
   protected_paths:
     - ".asi/**"
     - ".github/**"
+    - "requirements-ci.lock"
     - "skills/asi-verifiable-engineering/SKILL.md"
     - "skills/asi-verifiable-engineering/references/**"
     - "skills/asi-verifiable-engineering/scripts/**"
+    - "tests/**"
     - "tools/**"
 
 commands:
-  install: "python --version"
-  format_check: "python tools/validate_skill_package.py skills/asi-verifiable-engineering"
-  lint: "python tools/validate_skill_package.py skills/asi-verifiable-engineering"
-  typecheck: "python -m compileall tools tests skills/asi-verifiable-engineering/scripts"
+  install: "python -m pip install --disable-pip-version-check --no-deps -r requirements-ci.lock"
+  integrity: "python skills/asi-verifiable-engineering/scripts/verify_change_budget.py --budget .asi/evidence-inputs/pr-1-change-budget.json"
+  format_check: "python -m ruff format --check ."
+  lint: "python -m ruff check ."
+  typecheck: "python -m mypy --strict tools tests skills/asi-verifiable-engineering/scripts"
   build: "python tools/validate_skill_package.py skills/asi-verifiable-engineering"
-  unit_tests: "python -m unittest discover -s tests -v"
-  integration_tests: "python skills/asi-verifiable-engineering/scripts/validate_policy.py .asi/policy.yml && python skills/asi-verifiable-engineering/scripts/validate_evidence.py skills/asi-verifiable-engineering/assets/evidence-manifest.example.json && python skills/asi-verifiable-engineering/scripts/evaluate_change.py .asi/policy.yml skills/asi-verifiable-engineering/assets/evidence-manifest.example.json --expect APPROVED"
-  security_scan: "python tools/validate_skill_package.py skills/asi-verifiable-engineering"
+  unit_tests: "python -m unittest discover -s tests -p test_*.py -v"
+  integration_tests: "python -m unittest discover -s tests -p test_integration*.py -v"
+  secret_scan: "python skills/asi-verifiable-engineering/scripts/scan_secrets.py ."
+  dependency_scan: "python skills/asi-verifiable-engineering/scripts/scan_supply_chain.py ."
+  test_honesty: "python -m unittest tests.test_adversarial_controls -v"
 
 required_gates:
+  integrity: true
   format_check: true
   lint: true
   typecheck: true
@@ -44,9 +50,11 @@ risk_escalation:
   high:
     - ".asi/**"
     - ".github/**"
+    - "requirements-ci.lock"
     - "skills/asi-verifiable-engineering/SKILL.md"
     - "skills/asi-verifiable-engineering/references/**"
     - "skills/asi-verifiable-engineering/scripts/**"
+    - "tests/**"
     - "tools/**"
   critical:
     - ".github/workflows/release-skill.yml"
@@ -98,6 +106,8 @@ evidence:
   require_commit_sha: true
   require_exit_codes: true
   require_artifact_digests: true
+  require_measured_commands: true
+  require_binding_verification: true
 
 deployment:
   build_once_promote_same_artifact: true
