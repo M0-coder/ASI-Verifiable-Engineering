@@ -61,6 +61,39 @@ class PreoperationalLevelTests(unittest.TestCase):
         self.assertEqual("E5", manifest["evidence_level"])
         self.assertEqual("T3", manifest["assurance_level"])
 
+    def test_solo_operator_state_replaces_legacy_human_audit_language(self) -> None:
+        manifest = {
+            "review": {
+                "builder": "builder-context-01",
+                "auditor": None,
+                "same_context": False,
+                "human_review": {
+                    "required": True,
+                    "completed": False,
+                    "mode": "targeted",
+                },
+            },
+            "gates": {"independent_audit": "failed"},
+            "residual_risks": [
+                "Independent targeted human review has not been completed.",
+                "The Skill has not been observed in the target environment.",
+            ],
+        }
+        finalizer._normalize_solo_operator_state(manifest)
+        self.assertEqual(
+            "separate_ai_read_only",
+            manifest["review"]["audit_review"]["mode"],
+        )
+        self.assertEqual("owner_merge", manifest["review"]["human_review"]["mode"])
+        self.assertIn(
+            "Independent separate-context AI audit has not been completed.",
+            manifest["residual_risks"],
+        )
+        self.assertNotIn(
+            "Independent targeted human review has not been completed.",
+            manifest["residual_risks"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
