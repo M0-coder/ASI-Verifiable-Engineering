@@ -30,6 +30,7 @@
     "skills/asi-verifiable-engineering/references/annex-d-policy-as-code.md",
     "skills/asi-verifiable-engineering/references/annex-e-automated-acceptance.md",
     "skills/asi-verifiable-engineering/references/core-doctrine.md",
+    "skills/asi-verifiable-engineering/references/solo-operator-mode.md",
     "skills/asi-verifiable-engineering/scripts/apply_review_attestation.py",
     "skills/asi-verifiable-engineering/scripts/check_branch_protection.py",
     "skills/asi-verifiable-engineering/scripts/check_format.py",
