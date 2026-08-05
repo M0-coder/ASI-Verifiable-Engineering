@@ -32,6 +32,9 @@ def load_budget(path: Path) -> dict[str, Any]:
     data = cast(dict[str, Any], raw)
     if data.get("version") != 1:
         raise ValueError("Change budget version must equal 1.")
+    builder_context = data.get("builder_context_id")
+    if not isinstance(builder_context, str) or not builder_context.strip():
+        raise ValueError("builder_context_id must be a non-empty string.")
     expected = data.get("expected_paths")
     if not isinstance(expected, list) or not expected:
         raise ValueError("expected_paths must be a non-empty list.")
@@ -121,6 +124,7 @@ def evaluate_budget(
 
     return {
         "budget_version": 1,
+        "builder_context_id": budget["builder_context_id"],
         "base_commit": base_commit,
         "evaluated_commit": evaluated_commit,
         "changed_files": changed_files,
