@@ -27,7 +27,6 @@ jobs:
       GITHUB_TOKEN: ${{ github.token }}
       ASI_GITHUB_ADMIN_TOKEN: ${{ secrets.ASI_GITHUB_ADMIN_TOKEN }}
       ASI_TRUST_POLICY: guardian/trust-policy.json
-      ASI_TRUST_OUTPUT: ${{ runner.temp }}/asi-trust-anchor
       ASI_HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
       ASI_PROTECTED_BRANCH: main
 
@@ -40,7 +39,9 @@ jobs:
           ref: main
 
       - name: Prepare trust-anchor output
-        run: mkdir -p "$ASI_TRUST_OUTPUT"
+        run: |
+          echo "ASI_TRUST_OUTPUT=$RUNNER_TEMP/asi-trust-anchor" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/asi-trust-anchor"
 
       - name: Register trusted check contract from main
         id: registration
