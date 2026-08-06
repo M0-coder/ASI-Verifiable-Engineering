@@ -6,6 +6,7 @@ on:
       - Validate ASI Skill
     types:
       - completed
+  workflow_dispatch:
 
 permissions:
   actions: read
@@ -14,12 +15,12 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: asi-trust-anchor-${{ github.event.workflow_run.id }}
+  group: asi-trust-anchor-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
   verify:
-    name: Guardian execution
+    name: ASI Trust Anchor
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
@@ -27,7 +28,7 @@ jobs:
       ASI_GITHUB_ADMIN_TOKEN: ${{ secrets.ASI_GITHUB_ADMIN_TOKEN }}
       ASI_TRUST_POLICY: guardian/trust-policy.json
       ASI_TRUST_OUTPUT: ${{ runner.temp }}/asi-trust-anchor
-      ASI_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      ASI_HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
       ASI_PROTECTED_BRANCH: main
 
     steps:
@@ -41,8 +42,22 @@ jobs:
       - name: Prepare trust-anchor output
         run: mkdir -p "$ASI_TRUST_OUTPUT"
 
+      - name: Register trusted check contract from main
+        id: registration
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"
+          python3 guardian/verify_contract.py \
+            --workflow .github/workflows/asi-trust-anchor.yml \
+            --policy guardian/trust-policy.json \
+            --verifier guardian/verify_protection_binding.py \
+            2>&1 | tee "$ASI_TRUST_OUTPUT/contract-registration.log"
+
       - name: Verify unprivileged workflow evidence
         id: evidence
+        if: github.event_name == 'workflow_run'
         continue-on-error: true
         run: |
           set -o pipefail
@@ -51,7 +66,7 @@ jobs:
 
       - name: Verify required-check producer binding
         id: protection
-        if: always()
+        if: github.event_name == 'workflow_run'
         continue-on-error: true
         run: |
           set -o pipefail
@@ -59,7 +74,7 @@ jobs:
             tee "$ASI_TRUST_OUTPUT/protection-verification.log"
 
       - name: Upload trust-anchor evidence
-        if: always()
+        if: github.event_name == 'workflow_run' && always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: asi-trust-anchor-${{ github.event.workflow_run.id }}
@@ -67,8 +82,16 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+      - name: Enforce registration decision
+        if: github.event_name == 'workflow_dispatch' && always()
+        env:
+          REGISTRATION_OUTCOME: ${{ steps.registration.outcome }}
+        run: |
+          set -euo pipefail
+          test "$REGISTRATION_OUTCOME" = "success"
+
       - name: Enforce trust-anchor decision
-        if: always()
+        if: github.event_name == 'workflow_run' && always()
         env:
           EVIDENCE_OUTCOME: ${{ steps.evidence.outcome }}
           PROTECTION_OUTCOME: ${{ steps.protection.outcome }}
