@@ -28,6 +28,13 @@ REQUIRED_WORKFLOW_SNIPPETS = {
     "workflow_dispatch_trigger": "  workflow_dispatch:",
     "workflow_run_trigger": "  workflow_run:",
     "trusted_main_checkout": "          ref: main",
+    "runtime_output_env": (
+        '          echo "ASI_TRUST_OUTPUT=$RUNNER_TEMP/asi-trust-anchor" '
+        '>> "$GITHUB_ENV"'
+    ),
+    "runtime_output_directory": (
+        '          mkdir -p "$RUNNER_TEMP/asi-trust-anchor"'
+    ),
     "registration_event_guard": "        if: github.event_name == 'workflow_dispatch'",
     "registration_ref_guard": '          test "$GITHUB_REF" = "refs/heads/main"',
     "registration_sha_guard": '          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"',
@@ -40,6 +47,36 @@ def _match_name(pattern: re.Pattern[str], text: str, label: str) -> str:
     if match is None:
         raise ValueError(f"Cannot resolve {label}.")
     return match.group("name").strip()
+
+
+def _verify_job_env_lines(workflow_text: str) -> list[str]:
+    lines = workflow_text.splitlines()
+    in_verify = False
+    in_env = False
+    result: list[str] = []
+
+    for line in lines:
+        if line == "  verify:":
+            in_verify = True
+            continue
+        if (
+            in_verify
+            and line.startswith("  ")
+            and not line.startswith("    ")
+            and line.strip()
+        ):
+            break
+        if in_verify and line == "    env:":
+            in_env = True
+            continue
+        if in_env:
+            if line.startswith("      "):
+                result.append(line.strip())
+                continue
+            if line.strip():
+                break
+
+    return result
 
 
 def evaluate_contract(
@@ -72,8 +109,12 @@ def evaluate_contract(
         if snippet not in workflow_text:
             missing.append(label)
 
+    job_env_lines = _verify_job_env_lines(workflow_text)
+    if any("${{ runner." in line for line in job_env_lines):
+        missing.append("runner_context_forbidden_in_job_env")
+
     return {
-        "contract_version": 1,
+        "contract_version": 2,
         "observed_names": observed_names,
         "missing_or_invalid_controls": sorted(missing),
         "passed": not missing,
