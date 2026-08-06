@@ -27,11 +27,14 @@ jobs:
           fetch-depth: 1
 
       - name: Compile trusted verifier
-        run: python3 -m py_compile guardian/verify_run.py
+        run: >-
+          python3 -m py_compile
+          guardian/verify_run.py
+          guardian/verify_protection_binding.py
 
       - name: Run guardian regression tests
         working-directory: guardian
-        run: python3 -m unittest test_verify_run.py -v
+        run: python3 -m unittest discover -p 'test_*.py' -v
 
       - name: Validate trust policy JSON
         run: python3 -m json.tool guardian/trust-policy.json >/dev/null
