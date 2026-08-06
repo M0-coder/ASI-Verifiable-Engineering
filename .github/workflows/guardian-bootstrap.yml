@@ -1,0 +1,37 @@
+name: Guardian Bootstrap
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/asi-trust-anchor.yml
+      - .github/workflows/guardian-bootstrap.yml
+      - guardian/**
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    name: Verify measured gates and derive decision
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out bootstrap candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Compile trusted verifier
+        run: python3 -m py_compile guardian/verify_run.py
+
+      - name: Run guardian regression tests
+        working-directory: guardian
+        run: python3 -m unittest test_verify_run.py -v
+
+      - name: Validate trust policy JSON
+        run: python3 -m json.tool guardian/trust-policy.json >/dev/null
+
+      - name: Confirm clean working tree
+        run: test -z "$(git status --porcelain)"

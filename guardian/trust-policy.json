@@ -1,0 +1,33 @@
+{
+  "artifact_prefix": "asi-evidence-",
+  "bootstrap_exceptions": [],
+  "protected_paths": [
+    ".asi/**",
+    ".github/workflows/**",
+    "guardian/**",
+    "mypy.ini",
+    "requirements-ci.lock",
+    "skills/asi-verifiable-engineering/scripts/**",
+    "tests/**",
+    "tools/**"
+  ],
+  "required_check": "ASI Trust Anchor",
+  "required_gates": [
+    "integrity",
+    "branch_protection",
+    "format_check",
+    "lint",
+    "typecheck",
+    "build",
+    "package_installability",
+    "unit_tests",
+    "integration_tests",
+    "secret_scan",
+    "dependency_scan",
+    "rollback_check",
+    "independent_audit",
+    "target_environment_observation"
+  ],
+  "trusted_workflow": "Validate ASI Skill",
+  "version": 1
+}
