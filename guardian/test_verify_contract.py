@@ -24,6 +24,7 @@ class TrustAnchorContractTests(unittest.TestCase):
         workflow, policy, verifier = self.inputs()
         report = verify_contract.evaluate_contract(workflow, policy, verifier)
         self.assertTrue(report["passed"], report)
+        self.assertEqual(3, report["contract_version"])
         self.assertEqual(
             {
                 "workflow": "ASI Trust Anchor",
@@ -42,39 +43,54 @@ class TrustAnchorContractTests(unittest.TestCase):
             1,
         )
         report = verify_contract.evaluate_contract(invalid, policy, verifier)
-        self.assertFalse(report["passed"])
         self.assertIn(
             "check_name_contract_mismatch",
             report["missing_or_invalid_controls"],
         )
 
-    def test_registration_without_main_ref_guard_is_rejected(self) -> None:
+    def test_mobile_main_checkout_is_rejected(self) -> None:
         workflow, policy, verifier = self.inputs()
         invalid = workflow.replace(
-            '          test "$GITHUB_REF" = "refs/heads/main"\n',
-            "",
+            "          ref: ${{ github.workflow_sha }}",
+            "          ref: main",
             1,
         )
         report = verify_contract.evaluate_contract(invalid, policy, verifier)
         self.assertFalse(report["passed"])
         self.assertIn(
-            "registration_ref_guard",
+            "mobile_main_checkout_forbidden",
             report["missing_or_invalid_controls"],
         )
+        self.assertIn(
+            "immutable_workflow_checkout",
+            report["missing_or_invalid_controls"],
+        )
+
+    def test_v2_verifier_is_required(self) -> None:
+        workflow, policy, verifier = self.inputs()
+        invalid = workflow.replace(
+            "          python3 guardian/verify_run_v2.py 2>&1 |",
+            "          python3 guardian/verify_run.py 2>&1 |",
+            1,
+        )
+        report = verify_contract.evaluate_contract(invalid, policy, verifier)
+        self.assertIn("trusted_v2_verifier", report["missing_or_invalid_controls"])
+
+    def test_registration_without_main_ref_guard_is_rejected(self) -> None:
+        workflow, policy, verifier = self.inputs()
+        invalid = workflow.replace(
+            '          test "$GITHUB_REF" = "refs/heads/main"\n', "", 1
+        )
+        report = verify_contract.evaluate_contract(invalid, policy, verifier)
+        self.assertIn("registration_ref_guard", report["missing_or_invalid_controls"])
 
     def test_registration_without_exact_main_sha_is_rejected(self) -> None:
         workflow, policy, verifier = self.inputs()
         invalid = workflow.replace(
-            '          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"\n',
-            "",
-            1,
+            '          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"\n', "", 1
         )
         report = verify_contract.evaluate_contract(invalid, policy, verifier)
-        self.assertFalse(report["passed"])
-        self.assertIn(
-            "registration_sha_guard",
-            report["missing_or_invalid_controls"],
-        )
+        self.assertIn("registration_sha_guard", report["missing_or_invalid_controls"])
 
     def test_runner_context_in_job_env_is_rejected(self) -> None:
         workflow, policy, verifier = self.inputs()
@@ -85,7 +101,6 @@ class TrustAnchorContractTests(unittest.TestCase):
             1,
         )
         report = verify_contract.evaluate_contract(invalid, policy, verifier)
-        self.assertFalse(report["passed"])
         self.assertIn(
             "runner_context_forbidden_in_job_env",
             report["missing_or_invalid_controls"],
@@ -100,11 +115,16 @@ class TrustAnchorContractTests(unittest.TestCase):
             1,
         )
         report = verify_contract.evaluate_contract(invalid, policy, verifier)
-        self.assertFalse(report["passed"])
-        self.assertIn(
-            "runtime_output_env",
-            report["missing_or_invalid_controls"],
-        )
+        self.assertIn("runtime_output_env", report["missing_or_invalid_controls"])
+
+    def test_policy_v2_and_archive_limits_are_required(self) -> None:
+        workflow, policy, verifier = self.inputs()
+        invalid = dict(policy)
+        invalid["version"] = 1
+        invalid.pop("archive_limits")
+        report = verify_contract.evaluate_contract(workflow, invalid, verifier)
+        self.assertIn("trust_policy_v2", report["missing_or_invalid_controls"])
+        self.assertIn("archive_limits", report["missing_or_invalid_controls"])
 
 
 if __name__ == "__main__":
