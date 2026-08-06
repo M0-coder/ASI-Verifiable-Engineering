@@ -27,7 +27,12 @@ EXPECTED_CHECK = re.compile(
 REQUIRED_WORKFLOW_SNIPPETS = {
     "workflow_dispatch_trigger": "  workflow_dispatch:",
     "workflow_run_trigger": "  workflow_run:",
-    "trusted_main_checkout": "          ref: main",
+    "immutable_workflow_checkout": "          ref: ${{ github.workflow_sha }}",
+    "trust_anchor_sha_env": "      ASI_TRUST_ANCHOR_SHA: ${{ github.workflow_sha }}",
+    "trusted_v2_verifier": "          python3 guardian/verify_run_v2.py 2>&1 |",
+    "immutable_checkout_guard": (
+        '          test "$(git rev-parse HEAD)" = "$ASI_TRUST_ANCHOR_SHA"'
+    ),
     "runtime_output_env": (
         '          echo "ASI_TRUST_OUTPUT=$RUNNER_TEMP/asi-trust-anchor" '
         '>> "$GITHUB_ENV"'
@@ -39,6 +44,14 @@ REQUIRED_WORKFLOW_SNIPPETS = {
     "registration_ref_guard": '          test "$GITHUB_REF" = "refs/heads/main"',
     "registration_sha_guard": '          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"',
     "evidence_event_guard": "        if: github.event_name == 'workflow_run'",
+}
+
+REQUIRED_ARCHIVE_LIMITS = {
+    "max_compressed_bytes",
+    "max_files",
+    "max_member_bytes",
+    "max_total_uncompressed_bytes",
+    "max_compression_ratio",
 }
 
 
@@ -109,14 +122,31 @@ def evaluate_contract(
         if snippet not in workflow_text:
             missing.append(label)
 
+    if "          ref: main" in workflow_text:
+        missing.append("mobile_main_checkout_forbidden")
+
     job_env_lines = _verify_job_env_lines(workflow_text)
     if any("${{ runner." in line for line in job_env_lines):
         missing.append("runner_context_forbidden_in_job_env")
 
+    if policy.get("version") != 2:
+        missing.append("trust_policy_v2")
+    if policy.get("artifact_name_version") != 2:
+        missing.append("artifact_name_contract_v2")
+    archive_limits = policy.get("archive_limits")
+    if not isinstance(archive_limits, dict):
+        missing.append("archive_limits")
+    else:
+        missing.extend(
+            f"archive_limit_{name}"
+            for name in sorted(REQUIRED_ARCHIVE_LIMITS)
+            if name not in archive_limits
+        )
+
     return {
-        "contract_version": 2,
+        "contract_version": 3,
         "observed_names": observed_names,
-        "missing_or_invalid_controls": sorted(missing),
+        "missing_or_invalid_controls": sorted(set(missing)),
         "passed": not missing,
     }
 
