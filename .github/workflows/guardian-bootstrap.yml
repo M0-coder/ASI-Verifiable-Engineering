@@ -31,6 +31,7 @@ jobs:
           python3 -m py_compile
           guardian/verify_run.py
           guardian/verify_protection_binding.py
+          guardian/verify_contract.py
 
       - name: Run guardian regression tests
         working-directory: guardian
@@ -38,6 +39,13 @@ jobs:
 
       - name: Validate trust policy JSON
         run: python3 -m json.tool guardian/trust-policy.json >/dev/null
+
+      - name: Validate trust-anchor check contract
+        run: >-
+          python3 guardian/verify_contract.py
+          --workflow .github/workflows/asi-trust-anchor.yml
+          --policy guardian/trust-policy.json
+          --verifier guardian/verify_protection_binding.py
 
       - name: Confirm clean working tree
         run: test -z "$(git status --porcelain)"
