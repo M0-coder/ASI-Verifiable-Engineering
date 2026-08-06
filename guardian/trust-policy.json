@@ -1,4 +1,12 @@
 {
+  "archive_limits": {
+    "max_compressed_bytes": 100000000,
+    "max_compression_ratio": 100.0,
+    "max_files": 2048,
+    "max_member_bytes": 50000000,
+    "max_total_uncompressed_bytes": 250000000
+  },
+  "artifact_name_version": 2,
   "artifact_prefix": "asi-evidence-",
   "bootstrap_exceptions": [],
   "protected_paths": [
@@ -29,5 +37,5 @@
     "target_environment_observation"
   ],
   "trusted_workflow": "Validate ASI Skill",
-  "version": 1
+  "version": 2
 }
