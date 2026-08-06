@@ -76,6 +76,36 @@ class TrustAnchorContractTests(unittest.TestCase):
             report["missing_or_invalid_controls"],
         )
 
+    def test_runner_context_in_job_env_is_rejected(self) -> None:
+        workflow, policy, verifier = self.inputs()
+        invalid = workflow.replace(
+            "      ASI_TRUST_POLICY: guardian/trust-policy.json\n",
+            "      ASI_TRUST_POLICY: guardian/trust-policy.json\n"
+            "      ASI_TRUST_OUTPUT: ${{ runner.temp }}/asi-trust-anchor\n",
+            1,
+        )
+        report = verify_contract.evaluate_contract(invalid, policy, verifier)
+        self.assertFalse(report["passed"])
+        self.assertIn(
+            "runner_context_forbidden_in_job_env",
+            report["missing_or_invalid_controls"],
+        )
+
+    def test_runtime_output_export_is_required(self) -> None:
+        workflow, policy, verifier = self.inputs()
+        invalid = workflow.replace(
+            '          echo "ASI_TRUST_OUTPUT=$RUNNER_TEMP/asi-trust-anchor" '
+            '>> "$GITHUB_ENV"\n',
+            "",
+            1,
+        )
+        report = verify_contract.evaluate_contract(invalid, policy, verifier)
+        self.assertFalse(report["passed"])
+        self.assertIn(
+            "runtime_output_env",
+            report["missing_or_invalid_controls"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
