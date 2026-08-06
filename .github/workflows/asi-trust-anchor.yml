@@ -26,6 +26,9 @@ jobs:
       GITHUB_TOKEN: ${{ github.token }}
       ASI_GITHUB_ADMIN_TOKEN: ${{ secrets.ASI_GITHUB_ADMIN_TOKEN }}
       ASI_TRUST_POLICY: guardian/trust-policy.json
+      ASI_TRUST_OUTPUT: ${{ runner.temp }}/asi-trust-anchor
+      ASI_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      ASI_PROTECTED_BRANCH: main
 
     steps:
       - name: Check out trusted default-branch verifier
@@ -35,5 +38,41 @@ jobs:
           fetch-depth: 1
           ref: main
 
+      - name: Prepare trust-anchor output
+        run: mkdir -p "$ASI_TRUST_OUTPUT"
+
       - name: Verify unprivileged workflow evidence
-        run: python3 guardian/verify_run.py
+        id: evidence
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          python3 guardian/verify_run.py 2>&1 |
+            tee "$ASI_TRUST_OUTPUT/evidence-verification.log"
+
+      - name: Verify required-check producer binding
+        id: protection
+        if: always()
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          python3 guardian/verify_protection_binding.py 2>&1 |
+            tee "$ASI_TRUST_OUTPUT/protection-verification.log"
+
+      - name: Upload trust-anchor evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: asi-trust-anchor-${{ github.event.workflow_run.id }}
+          path: ${{ runner.temp }}/asi-trust-anchor/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Enforce trust-anchor decision
+        if: always()
+        env:
+          EVIDENCE_OUTCOME: ${{ steps.evidence.outcome }}
+          PROTECTION_OUTCOME: ${{ steps.protection.outcome }}
+        run: |
+          set -euo pipefail
+          test "$EVIDENCE_OUTCOME" = "success"
+          test "$PROTECTION_OUTCOME" = "success"
