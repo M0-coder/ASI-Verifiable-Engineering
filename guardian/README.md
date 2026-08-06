@@ -58,6 +58,13 @@ The workflow name, job/check name, policy `required_check`, and verifier
 `EXPECTED_CHECK` must all equal `ASI Trust Anchor`. `verify_contract.py` also
 rejects mobile `ref: main` checkout and any downgrade from verifier/policy v2.
 
+## Deferred assurance limits
+
+BIRTH-05 does not claim or manufacture independent execution identity (`I1`).
+It also does not convert a self-authored target-observation JSON into proof that
+ChatGPT, Codex, or the OpenAI API executed the package. Those controls remain
+blocked for a later design with an independently verifiable producer.
+
 ## Registration
 
 After an explicitly authorized merge, run `ASI Trust Anchor` once with
