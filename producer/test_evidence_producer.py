@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import evidence_producer as producer
+from producer import evidence_producer as producer
 
 
 class EvidenceProducerTests(unittest.TestCase):
@@ -22,17 +22,26 @@ class EvidenceProducerTests(unittest.TestCase):
 
     def test_change_budget_is_exact(self) -> None:
         self.assertTrue(
-            producer.verify_change_budget(sorted(producer.EXPECTED_PATHS))["within_budget"]
+            producer.verify_change_budget(
+                sorted(producer.EXPECTED_PATHS)
+            )["within_budget"]
         )
         bad = sorted(producer.EXPECTED_PATHS | {"unexpected.txt"})
         self.assertFalse(producer.verify_change_budget(bad)["within_budget"])
+
+    def test_measured_gate_set_excludes_unproved_controls(self) -> None:
+        self.assertNotIn("branch_protection", producer.MEASURED_GATES)
+        self.assertNotIn("typecheck", producer.MEASURED_GATES)
+        self.assertNotIn("package_installability", producer.MEASURED_GATES)
+        self.assertNotIn("independent_audit", producer.MEASURED_GATES)
+        self.assertNotIn("target_environment_observation", producer.MEASURED_GATES)
 
     def test_package_bytes_are_deterministic(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = root / "source"
             source.mkdir()
-            (source / "marker.txt").write_text("birth-06\n", encoding="utf-8")
+            (source / "marker.txt").write_text("birth-06.1\n", encoding="utf-8")
             first = root / "first.zip"
             second = root / "second.zip"
             self.assertEqual(
