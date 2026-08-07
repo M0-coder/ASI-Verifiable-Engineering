@@ -1,78 +1,64 @@
 # ASI Trust Anchor
 
-This directory contains the verifier trusted from the workflow file commit rather
-than from a moving branch reference. Pull-request code remains unprivileged and
-is never executed by the trust anchor.
+This directory contains the verifier trusted from the immutable workflow commit,
+not from pull-request code.
 
-## Security boundary
+## BIRTH-07 authority split
 
-- `Validate ASI Skill` produces candidate evidence without privileged writes.
-- `ASI Trust Anchor` is triggered by `workflow_run` from the default branch.
-- The repository is checked out at `${{ github.workflow_sha }}` and the checked-out
-  commit must equal `ASI_TRUST_ANCHOR_SHA`.
-- `guardian/verify_run_v2.py` downloads evidence but never executes PR code.
-- The required `ASI Trust Anchor` check is created on the exact PR head.
-- Branch protection must bind that check to the producing GitHub App.
-- Control-plane changes require an exact, unexpired H1 exception bound to PR,
-  base SHA, head SHA, and the complete set of protected paths.
-- The exact portable Skill ZIP must be present in the workflow artifact.
+Policy v3 partitions required gates into two disjoint authorities:
 
-## Artifact identity v2
+- `source_required_gates`: evidence the unprivileged `Validate ASI Skill` workflow
+  must measure and bind.
+- `trusted_required_gates`: evidence that only the trust anchor may establish.
 
-The unprivileged workflow must publish exactly one non-expired artifact named:
+`branch_protection` is the sole trusted gate. The producer must leave it
+`not_verified` and must not publish gate evidence for it. `verify_run_v3.py`
+observes branch protection with the read-only administrative token and validates
+that `ASI Trust Anchor` is strict, app-bound, enforced for administrators, and
+cannot be bypassed by force-push or deletion settings.
 
-```text
-asi-evidence-<run_id>-attempt-<run_attempt>-<head_sha>-<evaluated_sha>
-```
+The source `decision.json` is explicitly a non-authoritative claim. The trust
+anchor derives acceptance from verified source gates, trusted gates, exact
+artifact identity, protected-path authorization, and package bytes.
 
-This prevents evidence from an older attempt or merge commit from being selected
-under the same run name.
+## H1 control-plane exceptions
 
-## Archive safety
+A protected-path exception may still come from a static policy entry, but policy
+v3 additionally supports `owner_comment_v1`. The trust anchor accepts a PR
+Conversation comment only when:
 
-Before extraction, the v2 verifier rejects:
+- the GitHub author is listed in `h1_authorizers`;
+- GitHub reports `author_association: OWNER`;
+- the comment begins with `ASI-H1-EXCEPTION-V1`;
+- the JSON payload binds exact PR number, base SHA, head SHA, complete protected
+  path set, reason, and unexpired timestamp;
+- `authorization_level` is `H1`;
+- `authorization_scope` is `control-plane-exception-only`;
+- `merge_authorized` is exactly `false`.
 
-- path traversal, absolute paths, symbolic links, and duplicate names;
-- encrypted entries and unsupported compression methods;
-- excessive file count, member size, total expanded size, or compression ratio.
+This exception permits the trust anchor to evaluate a protected control-plane
+change. It is **not** merge authorization. A separate explicit owner decision is
+still required before any H1 merge.
 
-The limits are policy-as-code in `guardian/trust-policy.json`.
+No H1 exception is created by BIRTH-07 for PR #6.
 
-## Trust-anchor provenance
+## Bootstrap boundary
 
-Every v2 report records:
+Because the currently installed policy v2 has an empty `bootstrap_exceptions`
+list and `ASI Trust Anchor` is already mandatory on `main`, BIRTH-07 itself
+cannot be merged by pretending to satisfy the old trust anchor. That circular
+bootstrap is intentionally reported rather than bypassed.
 
-- `trust_anchor_commit`;
-- workflow digest;
-- policy digest;
-- verifier digest;
-- source run ID and run attempt;
-- exact source artifact name, ID, and digest.
+BIRTH-07 must remain draft until there is a separately authorized transition
+that preserves the required check. The legacy PR #1 remains frozen.
 
-Raw PR, artifact-list, selected-artifact, and branch-protection responses are
-written into the trust-anchor evidence directory.
+## Artifact identity and archive safety
 
-## Check-name contract
+Artifact identity remains v2:
 
-The workflow name, job/check name, policy `required_check`, and verifier
-`EXPECTED_CHECK` must all equal `ASI Trust Anchor`. `verify_contract.py` also
-rejects mobile `ref: main` checkout and any downgrade from verifier/policy v2.
+`asi-evidence-<run_id>-attempt-<run_attempt>-<head_sha>-<evaluated_sha>`
 
-## Deferred assurance limits
-
-BIRTH-05 does not claim or manufacture independent execution identity (`I1`).
-It also does not convert a self-authored target-observation JSON into proof that
-ChatGPT, Codex, or the OpenAI API executed the package. Those controls remain
-blocked for a later design with an independently verifiable producer.
-
-## Registration
-
-After an explicitly authorized merge, run `ASI Trust Anchor` once with
-`workflow_dispatch` from `main`. Registration validates only the trusted
-contract and publishes the check name. Configure branch protection only after
-that run succeeds.
-
-## Bootstrap rule
-
-This hardening remains blocked for merge until a new explicit H1 authorization.
-The legacy PR #1 remains frozen and must not be used as current evidence.
+Archive extraction keeps the BIRTH-05 limits for path traversal, duplicates,
+symlinks, encryption, compression methods, file count, member size, total
+expanded size, and compression ratio. Trust-anchor provenance remains bound to
+the immutable workflow SHA and workflow/policy/verifier digests.
