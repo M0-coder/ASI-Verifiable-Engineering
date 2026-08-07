@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Produce unprivileged ASI evidence bound to one pull-request merge commit.
 
-BIRTH-06 deliberately proves only the evidence transport/identity contract. It
-must not manufacture privileged branch-protection evidence, independent audit
-identity, target-environment observation, or any other gate that was not
-actually measured by this producer.
+BIRTH-06.1 measures only gates that can be executed honestly with the current
+stdlib-only producer. Privileged branch protection, a reproducible external
+type checker, product package installability, independent I1 audit identity,
+and target-environment observation remain not_verified.
 """
 
 from __future__ import annotations
@@ -36,11 +36,26 @@ REQUIRED_GATES = (
     "independent_audit",
     "target_environment_observation",
 )
+MEASURED_GATES = {
+    "integrity",
+    "format_check",
+    "lint",
+    "build",
+    "unit_tests",
+    "integration_tests",
+    "secret_scan",
+    "dependency_scan",
+    "rollback_check",
+}
 EXPECTED_PATHS = {
     ".github/workflows/validate-skill.yml",
     "producer/README.md",
     "producer/evidence_producer.py",
+    "producer/gate_checks.py",
+    "producer/run_gate.py",
     "producer/test_evidence_producer.py",
+    "producer/test_gate_checks.py",
+    "producer/test_integration_contract.py",
     "producer/package-source/BIRTH-06-PRODUCER.txt",
 }
 
@@ -81,7 +96,14 @@ def git(root: Path, *args: str) -> str:
 
 
 def changed_files(root: Path, base_sha: str, evaluated_sha: str) -> list[str]:
-    output = git(root, "diff", "--name-only", "--diff-filter=ACDMRTUXB", base_sha, evaluated_sha)
+    output = git(
+        root,
+        "diff",
+        "--name-only",
+        "--diff-filter=ACDMRTUXB",
+        base_sha,
+        evaluated_sha,
+    )
     return sorted(line for line in output.splitlines() if line)
 
 
@@ -101,7 +123,10 @@ def verify_change_budget(files: list[str]) -> dict[str, Any]:
 
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(value, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def build_deterministic_package(source: Path, target: Path) -> str:
@@ -141,11 +166,19 @@ def integrity_gate(
     checked_out = git(root, "rev-parse", "HEAD")
     if checked_out != evaluated_sha:
         raise ValueError("checked-out commit does not equal evaluated_sha")
-    subprocess.run(["git", "merge-base", "--is-ancestor", base_sha, evaluated_sha], cwd=root, check=True)
-    subprocess.run(["git", "merge-base", "--is-ancestor", head_sha, evaluated_sha], cwd=root, check=True)
+    subprocess.run(
+        ["git", "merge-base", "--is-ancestor", base_sha, evaluated_sha],
+        cwd=root,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "merge-base", "--is-ancestor", head_sha, evaluated_sha],
+        cwd=root,
+        check=True,
+    )
     budget = verify_change_budget(files)
     if not budget["within_budget"]:
-        raise ValueError("BIRTH-06 change budget does not match the live diff")
+        raise ValueError("BIRTH-06.1 change budget does not match the live diff")
 
     log_rel = "gates/integrity.log"
     result_rel = "gates/integrity.json"
@@ -172,7 +205,7 @@ def integrity_gate(
         "name": "integrity",
         "exit_code": 0,
         "argv": ["producer/evidence_producer.py", "integrity"],
-        "command": "BIRTH-06 producer identity and exact-diff budget check",
+        "command": "BIRTH-06.1 producer identity and exact-diff budget check",
         "log_artifact": log_rel,
         "log_digest": sha256_file(log_path),
     }
@@ -196,6 +229,59 @@ def integrity_gate(
     return command, binding
 
 
+def load_measured_gate(
+    output: Path,
+    name: str,
+) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    result_rel = f"gates/{name}.json"
+    result_path = output / result_rel
+    if not result_path.is_file():
+        raise ValueError(f"measured gate result is missing: {name}")
+    data = json.loads(result_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"measured gate result is not an object: {name}")
+    if data.get("result_version") != 2 or data.get("name") != name:
+        raise ValueError(f"measured gate identity is invalid: {name}")
+    exit_code = data.get("exit_code")
+    argv = data.get("argv")
+    command_text = data.get("command")
+    log_rel = data.get("log_artifact")
+    log_digest = data.get("log_digest")
+    if (
+        not isinstance(exit_code, int)
+        or not isinstance(argv, list)
+        or not argv
+        or not all(isinstance(item, str) and item for item in argv)
+        or not isinstance(command_text, str)
+        or not command_text
+        or not isinstance(log_rel, str)
+        or not isinstance(log_digest, str)
+    ):
+        raise ValueError(f"measured gate result is incomplete: {name}")
+    log_path = output / log_rel
+    if not log_path.is_file() or sha256_file(log_path) != log_digest:
+        raise ValueError(f"measured gate log binding is invalid: {name}")
+    result_digest = sha256_file(result_path)
+    command = {
+        "name": name,
+        "argv": argv,
+        "command": command_text,
+        "exit_code": exit_code,
+        "result_artifact": result_rel,
+        "result_digest": result_digest,
+        "log_artifact": log_rel,
+        "log_digest": log_digest,
+    }
+    binding = {
+        "result_artifact": result_rel,
+        "result_digest": result_digest,
+        "log_artifact": log_rel,
+        "log_digest": log_digest,
+    }
+    state = "passed" if exit_code == 0 else "failed"
+    return state, command, binding
+
+
 def produce(args: argparse.Namespace) -> dict[str, Any]:
     root = Path(args.repo_root).resolve()
     output = Path(args.output_dir).resolve()
@@ -204,12 +290,17 @@ def produce(args: argparse.Namespace) -> dict[str, Any]:
     base_sha = require_sha40(args.base_sha, "base_sha")
     head_sha = require_sha40(args.head_sha, "head_sha")
     evaluated_sha = require_sha40(args.evaluated_sha, "evaluated_sha")
-    expected_artifact = artifact_name(args.run_id, args.run_attempt, head_sha, evaluated_sha)
+    expected_artifact = artifact_name(
+        args.run_id,
+        args.run_attempt,
+        head_sha,
+        evaluated_sha,
+    )
     if args.expected_artifact_name != expected_artifact:
         raise ValueError("workflow artifact name does not match artifact identity v2")
 
     files = changed_files(root, base_sha, evaluated_sha)
-    command, binding = integrity_gate(
+    integrity_command, integrity_binding = integrity_gate(
         root,
         output,
         base_sha=base_sha,
@@ -218,20 +309,55 @@ def produce(args: argparse.Namespace) -> dict[str, Any]:
         files=files,
     )
 
+    observed_result_names = {
+        path.stem for path in (output / "gates").glob("*.json")
+    }
+    unexpected_results = observed_result_names - MEASURED_GATES
+    if unexpected_results:
+        raise ValueError(
+            "unexpected measured gate result(s): "
+            + ", ".join(sorted(unexpected_results))
+        )
+
+    gates = {gate: "not_verified" for gate in REQUIRED_GATES}
+    gates["integrity"] = "passed"
+    commands = [integrity_command]
+    gate_evidence: dict[str, dict[str, Any]] = {
+        "integrity": integrity_binding
+    }
+
+    for name in sorted(MEASURED_GATES - {"integrity"}):
+        state, command, binding = load_measured_gate(output, name)
+        gates[name] = state
+        commands.append(command)
+        gate_evidence[name] = binding
+
     package_path = output / "package" / "asi-verifiable-engineering.zip"
     package_digest = build_deterministic_package(
         root / "producer" / "package-source",
         package_path,
     )
 
-    gates = {gate: "not_verified" for gate in REQUIRED_GATES}
-    gates["integrity"] = "passed"
     blockers = [
-        f"Required gate {gate} is not verified by BIRTH-06."
+        (
+            f"Required gate {gate} failed in BIRTH-06.1."
+            if gates[gate] == "failed"
+            else f"Required gate {gate} is not verified by BIRTH-06.1."
+        )
         for gate in REQUIRED_GATES
-        if gate != "integrity"
+        if gates[gate] != "passed"
     ]
-    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    unverified = [
+        f"Required gate {gate} is not verified by BIRTH-06.1."
+        for gate in REQUIRED_GATES
+        if gates[gate] == "not_verified"
+    ]
+    now = (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
     budget = verify_change_budget(files)
 
     manifest = {
@@ -249,21 +375,26 @@ def produce(args: argparse.Namespace) -> dict[str, Any]:
         "artifact_name": expected_artifact,
         "changed_files": files,
         "change_budget": budget,
-        "commands": [command],
+        "commands": commands,
         "gates": gates,
-        "gate_evidence": {"integrity": binding},
+        "gate_evidence": gate_evidence,
         "package_installability": {
             "archive": "package/asi-verifiable-engineering.zip",
             "archive_digest": package_digest,
             "status": "not_verified",
-            "note": "Exact package bytes are preserved for contract testing; this is not a release or target-observation attestation.",
+            "note": (
+                "Exact package bytes are preserved for contract testing; "
+                "the marker ZIP is not the reconstructed Skill product."
+            ),
         },
         "independence": ["I2"],
-        "unverified": blockers,
+        "unverified": unverified,
         "residual_risks": [
             "Privileged branch-protection evidence is intentionally absent from the unprivileged producer.",
-            "Independent I1 execution identity is not established by BIRTH-06.",
-            "Target-environment observation of the exact package is not established by BIRTH-06.",
+            "No reproducible external type checker is installed in BIRTH-06.1.",
+            "The real Skill package has not yet been reconstructed from the frozen PR #1.",
+            "Independent I1 execution identity is not established by BIRTH-06.1.",
+            "Target-environment observation of the exact package is not established by BIRTH-06.1.",
         ],
         "decision": "BLOCKED",
         "created_at": now,
@@ -307,8 +438,14 @@ def parser() -> argparse.ArgumentParser:
 def main() -> int:
     try:
         manifest = produce(parser().parse_args())
-    except (OSError, ValueError, subprocess.CalledProcessError, zipfile.BadZipFile) as exc:
-        print(f"BIRTH-06 evidence production failed: {exc}")
+    except (
+        OSError,
+        ValueError,
+        subprocess.CalledProcessError,
+        json.JSONDecodeError,
+        zipfile.BadZipFile,
+    ) as exc:
+        print(f"BIRTH-06.1 evidence production failed: {exc}")
         return 2
     print(json.dumps(manifest, indent=2, sort_keys=True))
     return 0
