@@ -27,16 +27,24 @@ jobs:
       GITHUB_TOKEN: ${{ github.token }}
       ASI_GITHUB_ADMIN_TOKEN: ${{ secrets.ASI_GITHUB_ADMIN_TOKEN }}
       ASI_TRUST_POLICY: guardian/trust-policy.json
+      ASI_TRUST_WORKFLOW: .github/workflows/asi-trust-anchor.yml
+      ASI_TRUST_VERIFIER: guardian/verify_run_v2.py
+      ASI_TRUST_ANCHOR_SHA: ${{ github.workflow_sha }}
       ASI_HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
       ASI_PROTECTED_BRANCH: main
 
     steps:
-      - name: Check out trusted default-branch verifier
+      - name: Check out immutable trust-anchor verifier
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           fetch-depth: 1
-          ref: main
+          ref: ${{ github.workflow_sha }}
+
+      - name: Verify immutable trust-anchor checkout
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$ASI_TRUST_ANCHOR_SHA"
 
       - name: Prepare trust-anchor output
         run: |
@@ -62,7 +70,7 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          python3 guardian/verify_run.py 2>&1 |
+          python3 guardian/verify_run_v2.py 2>&1 |
             tee "$ASI_TRUST_OUTPUT/evidence-verification.log"
 
       - name: Verify required-check producer binding
@@ -78,7 +86,7 @@ jobs:
         if: github.event_name == 'workflow_run' && always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: asi-trust-anchor-${{ github.event.workflow_run.id }}
+          name: asi-trust-anchor-${{ github.event.workflow_run.id }}-attempt-${{ github.event.workflow_run.run_attempt }}-${{ github.event.workflow_run.head_sha }}-${{ github.workflow_sha }}
           path: ${{ runner.temp }}/asi-trust-anchor/
           if-no-files-found: error
           retention-days: 90
