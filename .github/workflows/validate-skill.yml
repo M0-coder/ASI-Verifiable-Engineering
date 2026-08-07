@@ -33,9 +33,76 @@ jobs:
           python-version: "3.12"
           cache: ""
 
-      - name: Run producer contract tests
-        working-directory: producer
-        run: python -m unittest -v test_evidence_producer.py
+      - name: Prepare evidence output
+        run: |
+          set -euo pipefail
+          echo "EVIDENCE_DIR=$RUNNER_TEMP/asi-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/asi-evidence"
+
+      - name: Execute measured technical gates
+        env:
+          ASI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          ASI_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ASI_EVALUATED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          gate() {
+            name="$1"
+            description="$2"
+            shift 2
+            python producer/run_gate.py \
+              --name "$name" \
+              --output-dir "$EVIDENCE_DIR" \
+              --description "$description" \
+              -- "$@"
+          }
+
+          gate format_check \
+            "UTF-8/LF/trailing-whitespace check over changed text files" \
+            python producer/gate_checks.py format \
+              --base-sha "$ASI_BASE_SHA" \
+              --evaluated-sha "$ASI_EVALUATED_SHA"
+
+          gate lint \
+            "AST lint over changed Python files" \
+            python producer/gate_checks.py lint \
+              --base-sha "$ASI_BASE_SHA" \
+              --evaluated-sha "$ASI_EVALUATED_SHA"
+
+          gate build \
+            "Compile every changed Python file with py_compile" \
+            python producer/gate_checks.py build \
+              --base-sha "$ASI_BASE_SHA" \
+              --evaluated-sha "$ASI_EVALUATED_SHA"
+
+          gate unit_tests \
+            "Producer unit tests" \
+            python -m unittest -v \
+              producer.test_evidence_producer \
+              producer.test_gate_checks
+
+          gate integration_tests \
+            "Producer-to-Guardian artifact identity and ZIP-policy integration tests" \
+            python -m unittest -v producer.test_integration_contract
+
+          gate secret_scan \
+            "High-confidence secret pattern scan over changed text files" \
+            python producer/gate_checks.py secret-scan \
+              --base-sha "$ASI_BASE_SHA" \
+              --evaluated-sha "$ASI_EVALUATED_SHA"
+
+          gate dependency_scan \
+            "Verify changed Python imports are stdlib or repository-local" \
+            python producer/gate_checks.py dependency-scan \
+              --base-sha "$ASI_BASE_SHA" \
+              --evaluated-sha "$ASI_EVALUATED_SHA"
+
+          gate rollback_check \
+            "Verify exact base..evaluated diff can be reverse-applied" \
+            python producer/gate_checks.py rollback \
+              --base-sha "$ASI_BASE_SHA" \
+              --head-sha "$ASI_HEAD_SHA" \
+              --evaluated-sha "$ASI_EVALUATED_SHA"
 
       - name: Produce commit-bound evidence
         env:
@@ -50,8 +117,6 @@ jobs:
           ASI_EXPECTED_ARTIFACT_NAME: asi-evidence-${{ github.run_id }}-attempt-${{ github.run_attempt }}-${{ github.event.pull_request.head.sha }}-${{ github.sha }}
         run: |
           set -euo pipefail
-          output="$RUNNER_TEMP/asi-evidence"
-          mkdir -p "$output"
           python producer/evidence_producer.py \
             --repository "$ASI_REPOSITORY" \
             --branch "$ASI_BRANCH" \
@@ -62,7 +127,7 @@ jobs:
             --run-attempt "$ASI_RUN_ATTEMPT" \
             --run-url "$ASI_RUN_URL" \
             --expected-artifact-name "$ASI_EXPECTED_ARTIFACT_NAME" \
-            --output-dir "$output"
+            --output-dir "$EVIDENCE_DIR"
 
       - name: Upload evidence with artifact identity v2
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
