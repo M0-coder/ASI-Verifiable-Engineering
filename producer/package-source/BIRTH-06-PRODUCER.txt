@@ -1,0 +1,3 @@
+BIRTH-06 producer contract fixture.
+This file proves deterministic package-byte transport only.
+It is not a release of the ASI Skill and is not target-environment evidence.
