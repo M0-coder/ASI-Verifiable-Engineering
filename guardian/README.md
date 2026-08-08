@@ -5,7 +5,7 @@ not from pull-request code.
 
 ## BIRTH-07 authority split
 
-Policy v3 partitions required gates into two disjoint authorities:
+Policy v4 partitions required gates into two disjoint authorities:
 
 - `source_required_gates`: evidence the unprivileged `Validate ASI Skill` workflow
   must measure and bind.
@@ -24,10 +24,15 @@ artifact identity, protected-path authorization, and package bytes.
 ## H1 control-plane exceptions
 
 A protected-path exception may still come from a static policy entry, but policy
-v3 additionally supports `owner_comment_v1`. The trust anchor accepts a PR
-Conversation comment only when:
+v4 additionally supports `owner_comment_v1`. H1 identity is bound primarily to
+the stable numeric GitHub `user_id`; the login stored in policy is informational
+metadata and may change without changing authority.
 
-- the GitHub author is listed in `h1_authorizers`;
+Before accepting an owner comment, the trust anchor fetches current repository
+metadata and requires the configured stable H1 identity to match the live
+repository owner. It then accepts a PR Conversation comment only when:
+
+- the comment author's numeric GitHub `user.id` matches an authorized stable ID;
 - GitHub reports `author_association: OWNER`;
 - the comment begins with `ASI-H1-EXCEPTION-V1`;
 - the JSON payload binds exact PR number, base SHA, head SHA, complete protected
@@ -35,6 +40,10 @@ Conversation comment only when:
 - `authorization_level` is `H1`;
 - `authorization_scope` is `control-plane-exception-only`;
 - `merge_authorized` is exactly `false`.
+
+A login rename with the same numeric ID does not invalidate the identity. A
+mismatched numeric ID, invalid owner relationship, stale scope, stale SHA, or
+expired authorization fails closed.
 
 This exception permits the trust anchor to evaluate a protected control-plane
 change. It is **not** merge authorization. A separate explicit owner decision is
@@ -62,3 +71,9 @@ Archive extraction keeps the BIRTH-05 limits for path traversal, duplicates,
 symlinks, encryption, compression methods, file count, member size, total
 expanded size, and compression ratio. Trust-anchor provenance remains bound to
 the immutable workflow SHA and workflow/policy/verifier digests.
+
+## Contract version
+
+BIRTH-07.2 uses trust policy v4 and contract v5. `verify_run_v3.py` keeps its
+filename because the verifier generation did not change; its accepted policy
+schema and H1 identity semantics did.
