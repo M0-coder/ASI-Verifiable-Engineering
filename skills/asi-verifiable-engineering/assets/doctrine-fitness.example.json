@@ -1,0 +1,15 @@
+{
+  "schema": "asi.doctrine_fitness.v1",
+  "profile_maturity": "EXPERIMENTAL",
+  "field_trial_id": "REPLACE_ME",
+  "work_context_type": "REPLACE_ME",
+  "rules_exercised": [],
+  "rules_with_material_findings": [],
+  "useful_negative_evidence": [],
+  "rules_not_exercised": [],
+  "false_positives_or_noise": [],
+  "missing_concepts_discovered": [],
+  "candidate_improvements": [],
+  "doctrine_review_required": false,
+  "note": "This record measures usefulness of the doctrine/profile; it does not authorize a normative change."
+}

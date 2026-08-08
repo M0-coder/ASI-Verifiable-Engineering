@@ -1,0 +1,15 @@
+{
+  "schema": "asi.audit_coverage.v1",
+  "work_context_id": "REPLACE_ME",
+  "candidate_identity": "REPLACE_ME",
+  "audit_mode": "READ_ONLY",
+  "inspected": [],
+  "executed": [],
+  "inherited_evidence": [],
+  "unavailable": [],
+  "not_inspected": [],
+  "write_actions": [],
+  "coverage_limitations": [],
+  "control_result": "NOT_VERIFIED",
+  "note": "Set PASS only for the audit-coverage disclosure control itself when the disclosure is complete and truthful; it is not the candidate decision."
+}

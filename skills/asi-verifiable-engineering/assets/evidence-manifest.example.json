@@ -1,0 +1,22 @@
+{
+  "schema": "asi.evidence_manifest.v1",
+  "repository": "owner/repository",
+  "work_context_id": "REPLACE_ME",
+  "candidate_identity": "REPLACE_ME",
+  "base_commit": "REPLACE_IF_APPLICABLE",
+  "head_commit": "REPLACE_IF_APPLICABLE",
+  "evaluated_commit": "REPLACE_IF_APPLICABLE",
+  "claim_set": [],
+  "risk": "MEDIUM",
+  "capability_manifest": [],
+  "controls": [],
+  "control_results": {},
+  "evidence_freshness": {},
+  "audit_coverage": "assets/audit-coverage.json",
+  "findings": [],
+  "assumptions": [],
+  "proof_bundle": {},
+  "candidate_decision": "BLOCKED",
+  "candidate_decision_reason_codes": ["insufficient_evidence"],
+  "decision_authority": "Trust Anchor"
+}

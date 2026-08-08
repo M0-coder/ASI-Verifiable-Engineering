@@ -8,15 +8,23 @@
   },
   "artifact_name_version": 2,
   "artifact_prefix": "asi-evidence-",
+  "bootstrap_exception_mode": "owner_comment_v1",
   "bootstrap_exceptions": [],
+  "h1_authorizers": [
+    {
+      "login": "M0-coder",
+      "user_id": 295708153
+    }
+  ],
+  "policy_id": "asi-trust-policy",
   "protected_paths": [
     ".asi/**",
     ".github/workflows/**",
     "guardian/**",
     "mypy.ini",
+    "producer/**",
     "requirements-ci.lock",
-    "skills/asi-verifiable-engineering/scripts/**",
-    "tests/**",
+    "skills/asi-verifiable-engineering/**",
     "tools/**"
   ],
   "required_check": "ASI Trust Anchor",
@@ -36,6 +44,25 @@
     "independent_audit",
     "target_environment_observation"
   ],
+  "revision": 6,
+  "source_required_gates": [
+    "integrity",
+    "format_check",
+    "lint",
+    "typecheck",
+    "build",
+    "package_installability",
+    "unit_tests",
+    "integration_tests",
+    "secret_scan",
+    "dependency_scan",
+    "rollback_check",
+    "independent_audit",
+    "target_environment_observation"
+  ],
+  "trusted_required_gates": [
+    "branch_protection"
+  ],
   "trusted_workflow": "Validate ASI Skill",
-  "version": 2
+  "version": 4
 }

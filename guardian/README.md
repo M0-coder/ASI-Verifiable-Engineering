@@ -1,78 +1,63 @@
 # ASI Trust Anchor
 
-This directory contains the verifier trusted from the workflow file commit rather
-than from a moving branch reference. Pull-request code remains unprivileged and
-is never executed by the trust anchor.
+`guardian/**` is the privileged verification boundary for this repository. Pull-request code remains unprivileged and is never executed with privileged repository credentials by the Trust Anchor.
 
-## Security boundary
+## Current contract
 
-- `Validate ASI Skill` produces candidate evidence without privileged writes.
-- `ASI Trust Anchor` is triggered by `workflow_run` from the default branch.
-- The repository is checked out at `${{ github.workflow_sha }}` and the checked-out
-  commit must equal `ASI_TRUST_ANCHOR_SHA`.
-- `guardian/verify_run_v2.py` downloads evidence but never executes PR code.
-- The required `ASI Trust Anchor` check is created on the exact PR head.
-- Branch protection must bind that check to the producing GitHub App.
-- Control-plane changes require an exact, unexpired H1 exception bound to PR,
-  base SHA, head SHA, and the complete set of protected paths.
-- The exact portable Skill ZIP must be present in the workflow artifact.
+- Trust policy schema: `v4`
+- Trust policy instance revision: `6`
+- Trust contract: `v6`
+- Runtime verifier generation: `verify_run_v4.py`
+- Artifact identity: `v2`
+- Required trusted check: `ASI Trust Anchor`
 
-## Artifact identity v2
+The policy instance protects the whole active control plane, CI typecheck inputs, and portable Skill source:
 
-The unprivileged workflow must publish exactly one non-expired artifact named:
+- `.asi/**`
+- `.github/workflows/**`
+- `guardian/**`
+- `mypy.ini`
+- `producer/**`
+- `requirements-ci.lock`
+- `skills/asi-verifiable-engineering/**`
+- `tools/**`
 
-```text
-asi-evidence-<run_id>-attempt-<run_attempt>-<head_sha>-<evaluated_sha>
-```
+`policy_contract.py`, `verify_contract.py`, and `verify_run_v4.py` enforce that these protection domains cannot silently disappear from a future policy revision.
 
-This prevents evidence from an older attempt or merge commit from being selected
-under the same run name.
+## Gate ownership
+
+`source_required_gates` belong to the unprivileged `Validate ASI Skill` producer. `trusted_required_gates` belong to this boundary.
+
+`branch_protection` is the sole trusted gate. The producer must leave it unverified and must not emit source evidence claiming it passed.
+
+The producer's `decision.json` is non-authoritative. The Trust Anchor derives acceptance after verifying source gates, trusted gates, candidate/artifact identity, protected-path authorization, package bytes, and branch-protection binding.
+
+## Stable H1 identity
+
+Protected-path evaluation may use `owner_comment_v1`. H1 identity binds primarily to the stable numeric GitHub user ID; login is diagnostic metadata.
+
+An accepted exception must bind exact repository owner stable user ID, PR number, base SHA, head SHA, complete protected path set, reason, unexpired timestamp, `authorization_level = H1`, `authorization_scope = control-plane-exception-only`, and `merge_authorized = false`.
+
+An exception permits evaluation of a protected-path change. It is not merge authorization.
+
+## Compatibility helpers
+
+`verify_run_v4.py` validates the current policy instance and delegates the established evidence protocol to `verify_run_v3.py`. The v3 implementation imports `verify_run.py` and `verify_run_v2.py` for mature helper functions and artifact/archive compatibility. Those files are therefore **active compatibility modules**, not dead code. Do not delete them solely because their filenames are older.
+
+The immutable trust-anchor commit binds the complete helper tree even when the compact provenance report highlights the top-level runtime verifier digest.
+
+## Typecheck boundary
+
+`mypy.ini` and `requirements-ci.lock` are protected control-plane inputs. `Validate ASI Skill` installs exact CI dependency versions and measures mypy over the current producer/tools and v4 Guardian contract surface. Legacy compatibility modules are kept outside the strict typecheck scope until they are refactored, and that scope must remain explicit in evidence.
 
 ## Archive safety
 
-Before extraction, the v2 verifier rejects:
+Artifact extraction rejects path traversal, absolute/unsafe paths, duplicate names, symlinks, encrypted/unsupported entries, excessive compressed/uncompressed size, excessive member count, and excessive compression ratio according to `trust-policy.json`.
 
-- path traversal, absolute paths, symbolic links, and duplicate names;
-- encrypted entries and unsupported compression methods;
-- excessive file count, member size, total expanded size, or compression ratio.
+## Provenance
 
-The limits are policy-as-code in `guardian/trust-policy.json`.
+The trusted workflow checks out `${{ github.workflow_sha }}` and verifies that the checked-out commit equals the immutable workflow SHA. Reports bind the trust-anchor commit plus workflow, policy, and top-level verifier digests.
 
-## Trust-anchor provenance
+## Transition
 
-Every v2 report records:
-
-- `trust_anchor_commit`;
-- workflow digest;
-- policy digest;
-- verifier digest;
-- source run ID and run attempt;
-- exact source artifact name, ID, and digest.
-
-Raw PR, artifact-list, selected-artifact, and branch-protection responses are
-written into the trust-anchor evidence directory.
-
-## Check-name contract
-
-The workflow name, job/check name, policy `required_check`, and verifier
-`EXPECTED_CHECK` must all equal `ASI Trust Anchor`. `verify_contract.py` also
-rejects mobile `ref: main` checkout and any downgrade from verifier/policy v2.
-
-## Deferred assurance limits
-
-BIRTH-05 does not claim or manufacture independent execution identity (`I1`).
-It also does not convert a self-authored target-observation JSON into proof that
-ChatGPT, Codex, or the OpenAI API executed the package. Those controls remain
-blocked for a later design with an independently verifiable producer.
-
-## Registration
-
-After an explicitly authorized merge, run `ASI Trust Anchor` once with
-`workflow_dispatch` from `main`. Registration validates only the trusted
-contract and publishes the check name. Configure branch protection only after
-that run succeeds.
-
-## Bootstrap rule
-
-This hardening remains blocked for merge until a new explicit H1 authorization.
-The legacy PR #1 remains frozen and must not be used as current evidence.
+Changes to this control plane can create a circular bootstrap when `main` still runs an older policy/verifier. Follow `BOOTSTRAP-TRANSITION.md`; never remove the required check or weaken branch protection as a shortcut.

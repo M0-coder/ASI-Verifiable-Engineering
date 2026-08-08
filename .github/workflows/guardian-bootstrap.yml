@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Check out bootstrap candidate
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -29,8 +29,11 @@ jobs:
       - name: Compile trusted verifier
         run: >-
           python3 -m py_compile
+          guardian/policy_contract.py
           guardian/verify_run.py
           guardian/verify_run_v2.py
+          guardian/verify_run_v3.py
+          guardian/verify_run_v4.py
           guardian/verify_protection_binding.py
           guardian/verify_contract.py
 

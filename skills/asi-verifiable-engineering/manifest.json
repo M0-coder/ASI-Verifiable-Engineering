@@ -1,0 +1,25 @@
+{
+  "schema": "asi.portable_manifest.v1",
+  "skill_version": "0.2.0-draft.1",
+  "doctrine_version": "3.3",
+  "architecture_version": "16",
+  "packaging_contract_version": "7",
+  "digest_algorithm": "git-blob-sha1",
+  "files": {
+    "SKILL.md": "75fe3bbb221f6533de8be9317e6fedeac76633ac",
+    "references/core-doctrine.md": "ab300a95f3d68b4eeb99381692736021e37526ef",
+    "references/architecture.md": "1c11bc15a34ecc3c3cc10d18770407751839d9d1",
+    "references/packaging-runtime.md": "5621210ba508e063d32c637a1ba29b8e3fccb38f",
+    "references/project-policy.md": "5d61be38152c0b2f1196777683aceb23eacaad67",
+    "references/field-validation.md": "99b74418bc1b639f523d3ee5e536bd075ce7e456",
+    "assets/canonical-domains.json": "58f580e3e850d628456906eed42c535c6628ba39",
+    "assets/norm-registry.json": "5971e46ae03f302397779cc96a1b62374aefe424",
+    "assets/audit-coverage.example.json": "93aea457bf0a3be58f2a588bec0ac4dae6814925",
+    "assets/doctrine-fitness.example.json": "a1373184dfe598e81c6495098b8590d367f72054",
+    "assets/evidence-manifest.example.json": "9034827950daefcfce6070bdc925f653b60bcb30",
+    "assets/project-policy.example.json": "15c3c712ec59110b2472d8cb4eac657391df7a1b",
+    "assets/specification-snapshot.json": "43e40b1a8aae14fc37040e45d5cc0999cb45fd17"
+  },
+  "self_digest": "computed_at_validation_time",
+  "note": "The package ZIP digest is produced by CI from these exact source bytes. The Notion source export digest remains explicitly NOT_VERIFIED in the Specification Snapshot."
+}

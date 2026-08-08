@@ -1,0 +1,204 @@
+name: Validate ASI Skill
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: validate-asi-skill-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  produce-evidence:
+    name: Produce ASI evidence v3
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPYCACHEPREFIX: /tmp/asi-producer-pycache
+      ASI_BUILDER_CONTEXT_ID: asi-constructor-reconcile-20260808-01
+
+    steps:
+      - name: Check out exact integrable PR state
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: ""
+
+      - name: Install version-locked CI typechecker
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --no-deps -r requirements-ci.lock
+          python -m mypy --version
+
+      - name: Prepare evidence output
+        run: |
+          set -euo pipefail
+          echo "EVIDENCE_DIR=$RUNNER_TEMP/asi-evidence" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/asi-evidence"
+
+      - name: Execute measured source gates
+        env:
+          ASI_REPOSITORY: ${{ github.repository }}
+          ASI_PR_NUMBER: ${{ github.event.pull_request.number }}
+          ASI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          ASI_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ASI_EVALUATED_SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gate() {
+            name="$1"
+            description="$2"
+            shift 2
+            python producer/run_gate.py \
+              --name "$name" \
+              --output-dir "$EVIDENCE_DIR" \
+              --description "$description" \
+              -- "$@"
+          }
+
+          external_gate() {
+            name="$1"
+            kind="$2"
+            description="$3"
+            probe="$RUNNER_TEMP/${name}-probe.log"
+            set +e
+            python -m producer.verify_external_attestation "$kind" \
+              --repository "$ASI_REPOSITORY" \
+              --pr-number "$ASI_PR_NUMBER" \
+              --head-sha "$ASI_HEAD_SHA" \
+              --builder-context-id "$ASI_BUILDER_CONTEXT_ID" >"$probe" 2>&1
+            probe_rc=$?
+            set -e
+            cat "$probe"
+            if [ "$probe_rc" -eq 3 ]; then
+              echo "$name: no admissible external attestation; leaving gate NOT_VERIFIED"
+              return 0
+            fi
+            gate "$name" "$description" \
+              python -m producer.verify_external_attestation "$kind" \
+                --repository "$ASI_REPOSITORY" \
+                --pr-number "$ASI_PR_NUMBER" \
+                --head-sha "$ASI_HEAD_SHA" \
+                --builder-context-id "$ASI_BUILDER_CONTEXT_ID"
+          }
+
+          gate format_check \
+            "UTF-8/LF/final-newline/trailing-whitespace check over changed text" \
+            python producer/gate_checks.py format \
+              --base-sha "$ASI_BASE_SHA" \
+              --evaluated-sha "$ASI_EVALUATED_SHA"
+
+          gate lint \
+            "AST lint over changed Python files" \
+            python producer/gate_checks.py lint \
+              --base-sha "$ASI_BASE_SHA" \
+              --evaluated-sha "$ASI_EVALUATED_SHA"
+
+          gate typecheck \
+            "mypy 2.3.0 strict typecheck over producer/tools and v3/v4 Guardian trust-anchor surfaces" \
+            python -m mypy --config-file mypy.ini \
+              producer \
+              tools \
+              guardian/policy_contract.py \
+              guardian/verify_contract.py \
+              guardian/verify_run_v3.py \
+              guardian/verify_run_v4.py
+
+          gate build \
+            "Compile every changed Python file" \
+            python producer/gate_checks.py build \
+              --base-sha "$ASI_BASE_SHA" \
+              --evaluated-sha "$ASI_EVALUATED_SHA"
+
+          gate package_installability \
+            "Validate portable Skill manifest, norm registry, canonical domains and source bindings" \
+            python tools/validate_skill_package.py
+
+          gate unit_tests \
+            "Producer, external-attestation, source-gate enforcement, gate-check and package-validator unit tests" \
+            python -m unittest -v \
+              producer.test_evidence_producer \
+              producer.test_enforce_measured_gates \
+              producer.test_gate_checks \
+              producer.test_verify_external_attestation \
+              tools.test_validate_skill_package
+
+          gate integration_tests \
+            "Producer-to-Guardian authority split and package integration tests" \
+            python -m unittest -v producer.test_integration_contract
+
+          gate secret_scan \
+            "High-confidence secret pattern scan over changed text" \
+            python producer/gate_checks.py secret-scan \
+              --base-sha "$ASI_BASE_SHA" \
+              --evaluated-sha "$ASI_EVALUATED_SHA"
+
+          gate dependency_scan \
+            "Verify changed Python imports are stdlib or repository-local; CI typechecker dependencies are separately version-locked" \
+            python producer/gate_checks.py dependency-scan \
+              --base-sha "$ASI_BASE_SHA" \
+              --evaluated-sha "$ASI_EVALUATED_SHA"
+
+          gate rollback_check \
+            "Verify exact base..evaluated diff can be reverse-applied" \
+            python producer/gate_checks.py rollback \
+              --base-sha "$ASI_BASE_SHA" \
+              --head-sha "$ASI_HEAD_SHA" \
+              --evaluated-sha "$ASI_EVALUATED_SHA"
+
+          external_gate independent_audit independent-audit \
+            "Validate immutable external read-only audit attestation bound to the exact PR head"
+
+          external_gate target_environment_observation target-environment-observation \
+            "Validate immutable target-environment observation bound to the exact PR head and portable package digest"
+
+      - name: Produce commit-bound evidence
+        env:
+          ASI_REPOSITORY: ${{ github.repository }}
+          ASI_BRANCH: ${{ github.event.pull_request.head.ref }}
+          ASI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          ASI_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ASI_EVALUATED_SHA: ${{ github.sha }}
+          ASI_RUN_ID: ${{ github.run_id }}
+          ASI_RUN_ATTEMPT: ${{ github.run_attempt }}
+          ASI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ASI_EXPECTED_ARTIFACT_NAME: asi-evidence-${{ github.run_id }}-attempt-${{ github.run_attempt }}-${{ github.event.pull_request.head.sha }}-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python producer/evidence_producer.py \
+            --repository "$ASI_REPOSITORY" \
+            --branch "$ASI_BRANCH" \
+            --base-sha "$ASI_BASE_SHA" \
+            --head-sha "$ASI_HEAD_SHA" \
+            --evaluated-sha "$ASI_EVALUATED_SHA" \
+            --run-id "$ASI_RUN_ID" \
+            --run-attempt "$ASI_RUN_ATTEMPT" \
+            --run-url "$ASI_RUN_URL" \
+            --expected-artifact-name "$ASI_EXPECTED_ARTIFACT_NAME" \
+            --output-dir "$EVIDENCE_DIR"
+
+      - name: Upload evidence with artifact identity v2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: asi-evidence-${{ github.run_id }}-attempt-${{ github.run_attempt }}-${{ github.event.pull_request.head.sha }}-${{ github.sha }}
+          path: ${{ runner.temp }}/asi-evidence/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Enforce measured source-gate failures after evidence upload
+        run: python producer/enforce_measured_gates.py "$EVIDENCE_DIR/manifest.json"
+
+      - name: Confirm clean working tree
+        run: test -z "$(git status --porcelain)"
