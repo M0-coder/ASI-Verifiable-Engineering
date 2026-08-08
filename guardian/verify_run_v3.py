@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Trust-anchor v3: split unprivileged source gates from trusted control-plane gates."""
+"""Trust-anchor v3: split gate authority and bind H1 to stable GitHub identity."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def gate_ownership(policy: dict[str, Any]) -> tuple[list[str], list[str]]:
     if set(source) | set(trusted) != set(required):
         raise ValueError("Source and trusted gates must partition required_gates exactly.")
     if trusted != ["branch_protection"]:
-        raise ValueError("branch_protection must be the sole trusted gate in policy v3.")
+        raise ValueError("branch_protection must be the sole trusted gate in policy v4.")
     return cast(list[str], source), cast(list[str], trusted)
 
 
@@ -144,10 +144,54 @@ def parse_h1_body(body: str) -> dict[str, Any] | None:
     return raw if isinstance(raw, dict) else None
 
 
+def h1_authorizers(policy: dict[str, Any]) -> list[dict[str, Any]]:
+    raw = policy.get("h1_authorizers")
+    if not isinstance(raw, list) or not raw:
+        raise ValueError("h1_authorizers must be a non-empty object list.")
+    result: list[dict[str, Any]] = []
+    seen_ids: set[int] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            raise ValueError("Each H1 authorizer must be an object.")
+        user_id = item.get("user_id")
+        login = item.get("login")
+        if isinstance(user_id, bool) or not isinstance(user_id, int) or user_id <= 0:
+            raise ValueError("Each H1 authorizer user_id must be a positive integer.")
+        if not isinstance(login, str) or not login.strip():
+            raise ValueError("Each H1 authorizer login must be non-empty metadata.")
+        if user_id in seen_ids:
+            raise ValueError("H1 authorizer user_ids must be unique.")
+        seen_ids.add(user_id)
+        result.append({"user_id": user_id, "login": login.strip()})
+    return result
+
+
+def validate_repository_owner(
+    authorizers: list[dict[str, Any]], repository_metadata: dict[str, Any]
+) -> dict[str, Any]:
+    owner = repository_metadata.get("owner")
+    if not isinstance(owner, dict):
+        raise ValueError("Repository owner metadata is missing.")
+    owner_id = owner.get("id")
+    owner_login = owner.get("login")
+    if isinstance(owner_id, bool) or not isinstance(owner_id, int) or owner_id <= 0:
+        raise ValueError("Repository owner stable user id is invalid.")
+    if not isinstance(owner_login, str) or not owner_login:
+        raise ValueError("Repository owner login metadata is invalid.")
+    for authorizer in authorizers:
+        if authorizer["user_id"] == owner_id:
+            return {
+                "user_id": owner_id,
+                "configured_login": authorizer["login"],
+                "observed_login": owner_login,
+            }
+    raise ValueError("Live repository owner stable user id is not an authorized H1 identity.")
+
+
 def h1_comment_matches(
     comment: dict[str, Any],
     *,
-    authorizers: list[str],
+    authorizers: list[dict[str, Any]],
     pr_number: int,
     base_sha: str,
     head_sha: str,
@@ -155,7 +199,15 @@ def h1_comment_matches(
     now: datetime | None = None,
 ) -> dict[str, Any] | None:
     user = comment.get("user")
-    if not isinstance(user, dict) or user.get("login") not in authorizers:
+    if not isinstance(user, dict):
+        return None
+    user_id = user.get("id")
+    if isinstance(user_id, bool) or not isinstance(user_id, int):
+        return None
+    matched_authorizer = next(
+        (item for item in authorizers if item.get("user_id") == user_id), None
+    )
+    if matched_authorizer is None:
         return None
     if comment.get("author_association") != "OWNER":
         return None
@@ -197,6 +249,8 @@ def h1_comment_matches(
         "comment_id": comment.get("id"),
         "comment_url": comment.get("html_url"),
         "authorized_by": user.get("login"),
+        "authorized_by_user_id": user_id,
+        "configured_login": matched_authorizer["login"],
         "expires_at": expires,
         "reason": data["reason"],
         "merge_authorized": False,
@@ -247,19 +301,22 @@ def resolve_control_plane_exception(
 
     if policy.get("bootstrap_exception_mode") != "owner_comment_v1":
         return None
-    authorizers = policy.get("h1_authorizers")
-    if not isinstance(authorizers, list) or not authorizers or not all(isinstance(x, str) for x in authorizers):
-        raise ValueError("h1_authorizers must be a non-empty string list.")
+    authorizers = h1_authorizers(policy)
+    repository_metadata = legacy.api_request(f"{api_base}/repos/{repository}", token)
+    if not isinstance(repository_metadata, dict):
+        raise ValueError("Cannot fetch repository owner metadata.")
+    owner_binding = validate_repository_owner(authorizers, repository_metadata)
     for comment in reversed(list_issue_comments(api_base, repository, pr_number, token)):
         match = h1_comment_matches(
             comment,
-            authorizers=cast(list[str], authorizers),
+            authorizers=authorizers,
             pr_number=pr_number,
             base_sha=base_sha,
             head_sha=head_sha,
             protected_changes=protected_changes,
         )
         if match is not None:
+            match["repository_owner"] = owner_binding
             return match
     return None
 
@@ -335,9 +392,10 @@ def run() -> int:
     check_id = legacy.create_check(api_base, repository, head_sha, token)
     try:
         policy = legacy.load_json(policy_path)
-        if policy.get("version") != 3 or policy.get("artifact_name_version") != 2:
-            raise ValueError("Trust policy v3 with artifact identity v2 is required.")
+        if policy.get("version") != 4 or policy.get("artifact_name_version") != 2:
+            raise ValueError("Trust policy v4 with artifact identity v2 is required.")
         gate_ownership(policy)
+        h1_authorizers(policy)
         limits = v2.archive_limits(policy)
         if source.get("name") != policy.get("trusted_workflow"):
             raise ValueError("Unexpected source workflow.")
