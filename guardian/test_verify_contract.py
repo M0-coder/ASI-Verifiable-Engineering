@@ -24,7 +24,7 @@ class TrustAnchorContractTests(unittest.TestCase):
         workflow, policy, verifier = self.inputs()
         report = verify_contract.evaluate_contract(workflow, policy, verifier)
         self.assertTrue(report["passed"], report)
-        self.assertEqual(4, report["contract_version"])
+        self.assertEqual(5, report["contract_version"])
         self.assertEqual(
             {
                 "workflow": "ASI Trust Anchor",
@@ -121,13 +121,13 @@ class TrustAnchorContractTests(unittest.TestCase):
         report = verify_contract.evaluate_contract(invalid, policy, verifier)
         self.assertIn("runtime_output_env", report["missing_or_invalid_controls"])
 
-    def test_policy_v3_and_archive_limits_are_required(self) -> None:
+    def test_policy_v4_and_archive_limits_are_required(self) -> None:
         workflow, policy, verifier = self.inputs()
         invalid = dict(policy)
-        invalid["version"] = 2
+        invalid["version"] = 3
         invalid.pop("archive_limits")
         report = verify_contract.evaluate_contract(workflow, invalid, verifier)
-        self.assertIn("trust_policy_v3", report["missing_or_invalid_controls"])
+        self.assertIn("trust_policy_v4", report["missing_or_invalid_controls"])
         self.assertIn("archive_limits", report["missing_or_invalid_controls"])
 
     def test_branch_protection_must_be_trust_owned(self) -> None:
@@ -155,6 +155,36 @@ class TrustAnchorContractTests(unittest.TestCase):
         invalid["h1_authorizers"] = []
         report = verify_contract.evaluate_contract(workflow, invalid, verifier)
         self.assertIn("h1_authorizers", report["missing_or_invalid_controls"])
+
+    def test_legacy_string_authorizer_schema_is_rejected(self) -> None:
+        workflow, policy, verifier = self.inputs()
+        invalid = dict(policy)
+        invalid["h1_authorizers"] = ["M0-coder"]
+        report = verify_contract.evaluate_contract(workflow, invalid, verifier)
+        self.assertIn("h1_authorizers", report["missing_or_invalid_controls"])
+
+    def test_nonpositive_stable_user_id_is_rejected(self) -> None:
+        workflow, policy, verifier = self.inputs()
+        invalid = dict(policy)
+        invalid["h1_authorizers"] = [{"user_id": 0, "login": "M0-coder"}]
+        report = verify_contract.evaluate_contract(workflow, invalid, verifier)
+        self.assertIn(
+            "h1_authorizer_stable_user_id",
+            report["missing_or_invalid_controls"],
+        )
+
+    def test_duplicate_stable_user_ids_are_rejected(self) -> None:
+        workflow, policy, verifier = self.inputs()
+        invalid = dict(policy)
+        invalid["h1_authorizers"] = [
+            {"user_id": 295708153, "login": "M0-coder"},
+            {"user_id": 295708153, "login": "renamed-owner"},
+        ]
+        report = verify_contract.evaluate_contract(workflow, invalid, verifier)
+        self.assertIn(
+            "h1_authorizer_duplicate_user_id",
+            report["missing_or_invalid_controls"],
+        )
 
 
 if __name__ == "__main__":
