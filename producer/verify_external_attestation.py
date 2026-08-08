@@ -131,8 +131,11 @@ def validate_attestation(
             or any(not isinstance(item, str) or not item for item in checks)
         ):
             errors.append("audit_checks_required")
-        if not isinstance(audit.get("findings"), list):
+        findings = audit.get("findings")
+        if not isinstance(findings, list):
             errors.append("audit_findings_must_be_list")
+        elif findings:
+            errors.append("audit_PASS_requires_no_findings")
         if audit.get("write_actions") != []:
             errors.append("audit_write_actions_must_be_empty")
         publication_actions = audit.get("publication_actions", [])
