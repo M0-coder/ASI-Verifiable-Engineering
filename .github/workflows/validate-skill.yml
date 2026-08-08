@@ -74,7 +74,7 @@ jobs:
             description="$3"
             probe="$RUNNER_TEMP/${name}-probe.log"
             set +e
-            python producer/verify_external_attestation.py "$kind" \
+            python -m producer.verify_external_attestation "$kind" \
               --repository "$ASI_REPOSITORY" \
               --pr-number "$ASI_PR_NUMBER" \
               --head-sha "$ASI_HEAD_SHA" \
@@ -87,7 +87,7 @@ jobs:
               return 0
             fi
             gate "$name" "$description" \
-              python producer/verify_external_attestation.py "$kind" \
+              python -m producer.verify_external_attestation "$kind" \
                 --repository "$ASI_REPOSITORY" \
                 --pr-number "$ASI_PR_NUMBER" \
                 --head-sha "$ASI_HEAD_SHA" \
