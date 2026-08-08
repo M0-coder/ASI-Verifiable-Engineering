@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: validate-asi-skill-${{ github.event.pull_request.number }}
@@ -18,6 +19,7 @@ jobs:
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONPYCACHEPREFIX: /tmp/asi-producer-pycache
+      ASI_BUILDER_CONTEXT_ID: asi-constructor-reconcile-20260808-01
 
     steps:
       - name: Check out exact integrable PR state
@@ -47,9 +49,12 @@ jobs:
 
       - name: Execute measured source gates
         env:
+          ASI_REPOSITORY: ${{ github.repository }}
+          ASI_PR_NUMBER: ${{ github.event.pull_request.number }}
           ASI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           ASI_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           ASI_EVALUATED_SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           gate() {
@@ -61,6 +66,32 @@ jobs:
               --output-dir "$EVIDENCE_DIR" \
               --description "$description" \
               -- "$@"
+          }
+
+          external_gate() {
+            name="$1"
+            kind="$2"
+            description="$3"
+            probe="$RUNNER_TEMP/${name}-probe.log"
+            set +e
+            python producer/verify_external_attestation.py "$kind" \
+              --repository "$ASI_REPOSITORY" \
+              --pr-number "$ASI_PR_NUMBER" \
+              --head-sha "$ASI_HEAD_SHA" \
+              --builder-context-id "$ASI_BUILDER_CONTEXT_ID" >"$probe" 2>&1
+            probe_rc=$?
+            set -e
+            cat "$probe"
+            if [ "$probe_rc" -eq 3 ]; then
+              echo "$name: no admissible external attestation; leaving gate NOT_VERIFIED"
+              return 0
+            fi
+            gate "$name" "$description" \
+              python producer/verify_external_attestation.py "$kind" \
+                --repository "$ASI_REPOSITORY" \
+                --pr-number "$ASI_PR_NUMBER" \
+                --head-sha "$ASI_HEAD_SHA" \
+                --builder-context-id "$ASI_BUILDER_CONTEXT_ID"
           }
 
           gate format_check \
@@ -95,11 +126,12 @@ jobs:
             python tools/validate_skill_package.py
 
           gate unit_tests \
-            "Producer, source-gate enforcement, gate-check and package-validator unit tests" \
+            "Producer, external-attestation, source-gate enforcement, gate-check and package-validator unit tests" \
             python -m unittest -v \
               producer.test_evidence_producer \
               producer.test_enforce_measured_gates \
               producer.test_gate_checks \
+              producer.test_verify_external_attestation \
               tools.test_validate_skill_package
 
           gate integration_tests \
@@ -124,6 +156,12 @@ jobs:
               --base-sha "$ASI_BASE_SHA" \
               --head-sha "$ASI_HEAD_SHA" \
               --evaluated-sha "$ASI_EVALUATED_SHA"
+
+          external_gate independent_audit independent-audit \
+            "Validate immutable external read-only audit attestation bound to the exact PR head"
+
+          external_gate target_environment_observation target-environment-observation \
+            "Validate immutable target-environment observation bound to the exact PR head and portable package digest"
 
       - name: Produce commit-bound evidence
         env:
