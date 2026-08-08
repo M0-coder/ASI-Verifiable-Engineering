@@ -6,6 +6,8 @@ This document defines a one-time transition procedure. It is not an authorizatio
 
 The transition exists because the currently installed policy v2 requires `ASI Trust Anchor` to pass for control-plane changes while `bootstrap_exceptions` is empty. The candidate BIRTH-07 mechanism cannot authorize the change that installs itself.
 
+BIRTH-07.2 repairs H1 authority before this transition: policy v4 binds the owner primarily by stable numeric GitHub user ID and contract v5 rejects the legacy login-only schema. Phase A must not start from an earlier BIRTH-07 head.
+
 ## Verified GitHub constraint
 
 Classic branch protection does not provide an exception scoped to one exact pull request. GitHub ruleset bypass permissions are actor/role/app scoped, and rulesets layer with existing branch-protection rules rather than replacing them.
@@ -24,6 +26,7 @@ During the one-time transition:
 - a pull request remains required by the temporary transition rule;
 - a successful GitHub Actions bootstrap check is required;
 - PR #7 must remain bound to one exact base SHA and head SHA;
+- the H1 authorizer must resolve to the live repository owner by stable GitHub user ID;
 - a separate explicit H1 merge authorization is still required;
 - no transition step authorizes PR #6 or PR #1.
 
@@ -46,7 +49,7 @@ The temporary ruleset must be active before any change to the classic rule.
 
 ### Phase B — one-time classic-rule transition
 
-Only after Phase A is verified and after a new explicit H1 authorization bound to the exact PR #7 head:
+Only after Phase A is verified and after a new explicit H1 authorization bound to the exact PR #7 head and stable owner user ID:
 
 1. keep `ASI Trust Anchor` configured as the required check in the classic rule;
 2. temporarily allow the repository administrator to bypass that classic rule;
@@ -61,7 +64,7 @@ This phase bypasses the obsolete v2 trust-root decision for one exact bootstrap 
 After PR #7 is merged:
 
 1. record the new `main` SHA;
-2. manually dispatch `ASI Trust Anchor` from `main` and require registration success under policy v3 / contract v4;
+2. manually dispatch `ASI Trust Anchor` from `main` and require registration success under policy v4 / contract v5;
 3. restore the classic rule to disallow bypassing;
 4. verify `ASI Trust Anchor` remains the required app-bound check;
 5. only after the classic rule is restored, disable or remove the temporary `Guardian Bootstrap` ruleset;
@@ -71,7 +74,7 @@ If any re-anchoring step fails, keep the temporary ruleset active and stop. Do n
 
 ## PR #6 after BIRTH-07
 
-Once Phase C is complete, PR #6 may be re-evaluated by the installed v3 trust anchor. Any control-plane exception for `.github/workflows/validate-skill.yml` must be a separate owner-comment H1 authorization bound exactly to PR number, base SHA, head SHA, complete protected-path set, expiry, and reason. That exception is not merge authorization.
+Once Phase C is complete, PR #6 may be re-evaluated by the installed `verify_run_v3.py` trust anchor under policy v4. Any control-plane exception for `.github/workflows/validate-skill.yml` must be a separate owner-comment H1 authorization bound exactly to stable owner user ID, PR number, base SHA, head SHA, complete protected-path set, expiry, and reason. That exception is not merge authorization.
 
 ## Stop conditions
 
@@ -80,6 +83,7 @@ Stop the transition if any of the following occurs:
 - PR #7 head changes after H1 authorization;
 - `main` changes and PR #7 is no longer up to date;
 - `Guardian Bootstrap` is not successful for the exact head;
+- the live repository owner stable user ID does not match the configured H1 identity;
 - the temporary ruleset has a bypass actor;
 - force pushes or deletion become allowed;
 - the temporary ruleset is not active before the classic-rule transition;
