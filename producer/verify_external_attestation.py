@@ -20,6 +20,10 @@ from producer.evidence_producer import PACKAGE_SOURCE, build_deterministic_packa
 
 API_VERSION = "2022-11-28"
 MARKER = "ASI-EXTERNAL-ATTESTATION-V1"
+KIND_PATTERN = re.compile(
+    r"^ASI-ATTESTATION-KIND:\s*(independent-audit|target-environment-observation)\s*$",
+    re.MULTILINE,
+)
 URL_PATTERN = re.compile(
     r"^ASI-ATTESTATION-URL:\s*(https://raw\.githubusercontent\.com/\S+)\s*$",
     re.MULTILINE,
@@ -179,12 +183,18 @@ def validate_attestation(
     return errors
 
 
-def latest_marked_reviews(reviews: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def latest_marked_reviews(
+    reviews: list[dict[str, Any]],
+    kind: str,
+) -> list[dict[str, Any]]:
     latest: dict[str, dict[str, Any]] = {}
     for review in sorted(reviews, key=lambda item: int(item.get("id", 0))):
         body = review.get("body")
         user = review.get("user")
         if not isinstance(body, str) or MARKER not in body or not isinstance(user, dict):
+            continue
+        kind_match = KIND_PATTERN.search(body)
+        if kind_match is None or kind_match.group(1) != kind:
             continue
         login = user.get("login")
         if isinstance(login, str) and login:
@@ -205,7 +215,7 @@ def evaluate_reviews(
 ) -> tuple[str, dict[str, Any]]:
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
-    marked = latest_marked_reviews(reviews)
+    marked = latest_marked_reviews(reviews, kind)
     for review in marked:
         reasons: list[str] = []
         user = review.get("user")
