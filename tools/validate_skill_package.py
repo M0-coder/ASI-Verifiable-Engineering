@@ -107,8 +107,8 @@ def validate(root: Path) -> dict[str, Any]:
         "architecture_version": "16",
         "packaging_contract_version": "7",
     }
-    for field, expected in expected_versions.items():
-        if manifest.get(field) != expected:
+    for field, expected_value in expected_versions.items():
+        if manifest.get(field) != expected_value:
             findings.append(f"manifest_{field}")
 
     files = manifest.get("files")
@@ -163,9 +163,9 @@ def validate(root: Path) -> dict[str, Any]:
     domains_path = root / "assets/canonical-domains.json"
     if domains_path.is_file():
         domains = load_json(domains_path)
-        for name, expected in EXPECTED_DOMAINS.items():
-            if domains.get(name) != expected:
-                findings.append(f"canonical_domain:{name}")
+        for domain_name, expected_values in EXPECTED_DOMAINS.items():
+            if domains.get(domain_name) != expected_values:
+                findings.append(f"canonical_domain:{domain_name}")
     else:
         findings.append("canonical_domains_missing")
 

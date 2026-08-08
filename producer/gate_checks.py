@@ -176,13 +176,17 @@ def dependency_scan(root: Path, base: str, evaluated: str) -> int:
     stdlib = set(sys.stdlib_module_names) | {"__future__"}
     local = repository_local_modules(root)
     external: dict[str, list[str]] = {}
-    for path in changed_python(root, base, evaluated):
-        bad = sorted(module for module in imported_roots(path) if module not in stdlib and module not in local)
+    for python_path in changed_python(root, base, evaluated):
+        bad = sorted(
+            module
+            for module in imported_roots(python_path)
+            if module not in stdlib and module not in local
+        )
         if bad:
-            external[str(path.relative_to(root))] = bad
+            external[str(python_path.relative_to(root))] = bad
     if external:
-        for path, modules in sorted(external.items()):
-            print(f"{path}: external imports: {', '.join(modules)}")
+        for display_path, modules in sorted(external.items()):
+            print(f"{display_path}: external imports: {', '.join(modules)}")
         return 1
     print("dependency_scan: changed Python uses only stdlib or repository-local modules")
     return 0
