@@ -1,97 +1,72 @@
-# BIRTH-07 bootstrap transition — dual lock
+# Control-plane bootstrap transition — dual lock
 
-## Status
+This is a one-time transition procedure for a pull request that changes the Trust Anchor/control plane while `main` still enforces an older verifier/policy. It is a procedure, not merge authorization.
 
-This document defines a one-time transition procedure. It is not an authorization to merge PR #7 and it does not change repository protection by itself.
+## Why a transition exists
 
-The transition exists because the currently installed policy v2 requires `ASI Trust Anchor` to pass for control-plane changes while `bootstrap_exceptions` is empty. The candidate BIRTH-07 mechanism cannot authorize the change that installs itself.
+The installed Trust Anchor on `main` cannot allow a new exception mechanism to authorize the change that installs that mechanism. Treat that circularity as a bootstrap constraint, not as permission to bypass the required check.
 
-BIRTH-07.2 repairs H1 authority before this transition: policy v4 binds the owner primarily by stable numeric GitHub user ID and contract v5 rejects the legacy login-only schema. Phase A must not start from an earlier BIRTH-07 head.
+## Preconditions
 
-## Verified GitHub constraint
+Before Phase A, obtain fresh administrative evidence for `main`:
 
-Classic branch protection does not provide an exception scoped to one exact pull request. GitHub ruleset bypass permissions are actor/role/app scoped, and rulesets layer with existing branch-protection rules rather than replacing them.
+- current branch-protection/ruleset state;
+- required check name and producing app binding;
+- strict/up-to-date behavior;
+- administrator enforcement;
+- conversation-resolution requirement where applicable;
+- force-push and deletion blocked;
+- current repository owner stable GitHub user ID;
+- exact reconciliation PR base SHA and head SHA;
+- successful `Guardian Bootstrap` for that exact head.
 
-Therefore there is no purely in-band transition from the current policy v2 to BIRTH-07 while preserving every current rule unchanged.
+If any fact is unavailable or stale, stop.
 
-## Safety invariant
+## Phase A — establish an independent temporary lock
 
-At no point may `main` be left without an active merge barrier.
+Create a temporary ruleset/control that:
 
-During the one-time transition:
+- applies to `main`;
+- requires pull requests;
+- requires the successful `Guardian Bootstrap` check for the exact control-plane candidate;
+- blocks force pushes and deletion;
+- has no broad bypass actor that defeats the purpose of the transition.
 
-- direct changes to `main` remain disallowed by an active rule;
-- force pushes remain blocked;
-- branch deletion remains blocked;
-- a pull request remains required by the temporary transition rule;
-- a successful GitHub Actions bootstrap check is required;
-- PR #7 must remain bound to one exact base SHA and head SHA;
-- the H1 authorizer must resolve to the live repository owner by stable GitHub user ID;
-- a separate explicit H1 merge authorization is still required;
-- no transition step authorizes PR #6 or PR #1.
+Verify the temporary lock is active before touching the classic/installed protection.
 
-## Proposed dual-lock ceremony
+## Phase B — exact one-time transition
 
-### Phase A — install a temporary independent lock
+Only after Phase A and a separate explicit owner H1 authorization bound to the exact reconciliation PR/head:
 
-Before changing the existing classic branch-protection rule, create a temporary active branch ruleset targeting only `main` with no bypass actors and with these minimum controls:
+1. keep `ASI Trust Anchor` configured as a required check;
+2. temporarily allow only the minimum administrator bypass required by the older installed rule;
+3. merge only the exact authorized head using the separately authorized merge method;
+4. do not use the temporary exception for any other PR or head.
 
-1. require a pull request before changes enter `main`;
-2. require `Guardian Bootstrap` from GitHub Actions;
-3. require the branch to be up to date before merge;
-4. require conversation resolution;
-5. block force pushes;
-6. block branch deletion.
+The H1 protected-path exception used by the candidate has `merge_authorized: false`; it is not the Phase B merge authorization.
 
-Verify that PR #7 at the exact authorized head shows the temporary ruleset as satisfied only after the corresponding `Guardian Bootstrap` run is successful.
+## Phase C — re-anchor and restore
 
-The temporary ruleset must be active before any change to the classic rule.
-
-### Phase B — one-time classic-rule transition
-
-Only after Phase A is verified and after a new explicit H1 authorization bound to the exact PR #7 head and stable owner user ID:
-
-1. keep `ASI Trust Anchor` configured as the required check in the classic rule;
-2. temporarily allow the repository administrator to bypass that classic rule;
-3. do not enable force pushes or deletions;
-4. do not merge any PR other than the exact authorized PR #7;
-5. squash-merge PR #7 only if the temporary ruleset still requires and observes a successful `Guardian Bootstrap` for the exact head.
-
-This phase bypasses the obsolete v2 trust-root decision for one exact bootstrap merge while the independent temporary ruleset remains enforced. It is not a normal steady-state merge path.
-
-### Phase C — re-anchor immediately
-
-After PR #7 is merged:
+After the authorized merge:
 
 1. record the new `main` SHA;
-2. manually dispatch `ASI Trust Anchor` from `main` and require registration success under policy v4 / contract v5;
-3. restore the classic rule to disallow bypassing;
-4. verify `ASI Trust Anchor` remains the required app-bound check;
-5. only after the classic rule is restored, disable or remove the temporary `Guardian Bootstrap` ruleset;
-6. verify force pushes and deletions remain disabled.
+2. manually dispatch `ASI Trust Anchor` from `main` and require registration/contract success under the new policy/verifier;
+3. restore the classic rule to no-bypass/enforce-admin posture;
+4. verify the required check remains app-bound and strict;
+5. only after the restored lock is verified, disable/remove the temporary transition ruleset;
+6. rerun any dependent candidate evidence whose base/trust identity changed.
 
-If any re-anchoring step fails, keep the temporary ruleset active and stop. Do not proceed to PR #6.
-
-## PR #6 after BIRTH-07
-
-Once Phase C is complete, PR #6 may be re-evaluated by the installed `verify_run_v3.py` trust anchor under policy v4. Any control-plane exception for `.github/workflows/validate-skill.yml` must be a separate owner-comment H1 authorization bound exactly to stable owner user ID, PR number, base SHA, head SHA, complete protected-path set, expiry, and reason. That exception is not merge authorization.
+If re-anchoring fails, keep the temporary lock active and stop. Do not weaken both locks at once.
 
 ## Stop conditions
 
-Stop the transition if any of the following occurs:
+Stop if:
 
-- PR #7 head changes after H1 authorization;
-- `main` changes and PR #7 is no longer up to date;
-- `Guardian Bootstrap` is not successful for the exact head;
-- the live repository owner stable user ID does not match the configured H1 identity;
-- the temporary ruleset has a bypass actor;
-- force pushes or deletion become allowed;
-- the temporary ruleset is not active before the classic-rule transition;
-- registration of the post-merge BIRTH-07 trust anchor fails;
-- the classic `ASI Trust Anchor` requirement cannot be restored before removing the temporary ruleset.
-
-## Rollback
-
-Before merge, rollback is to restore the original classic rule and remove the temporary ruleset; no repository code has changed on `main`.
-
-After merge, if BIRTH-07 registration fails, retain the temporary ruleset and treat `main` as bootstrap-recovery mode. Do not merge PR #6. A new repair PR must be validated under the temporary lock before any further transition.
+- reconciliation PR head/base changes after authorization;
+- repository owner stable user ID does not match policy;
+- Guardian Bootstrap is not successful for the exact head;
+- temporary lock is missing/ineffective;
+- force push/deletion becomes allowed;
+- required check is removed or loses app binding;
+- any step would authorize a different PR/head/path set;
+- evidence becomes stale and cannot be refreshed.

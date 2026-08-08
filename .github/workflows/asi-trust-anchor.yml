@@ -29,7 +29,7 @@ jobs:
       ASI_GITHUB_ADMIN_TOKEN: ${{ secrets.ASI_GITHUB_ADMIN_TOKEN }}
       ASI_TRUST_POLICY: guardian/trust-policy.json
       ASI_TRUST_WORKFLOW: .github/workflows/asi-trust-anchor.yml
-      ASI_TRUST_VERIFIER: guardian/verify_run_v3.py
+      ASI_TRUST_VERIFIER: guardian/verify_run_v4.py
       ASI_TRUST_ANCHOR_SHA: ${{ github.workflow_sha }}
       ASI_HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
       ASI_PROTECTED_BRANCH: main
@@ -71,7 +71,7 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          python3 guardian/verify_run_v3.py 2>&1 |
+          python3 guardian/verify_run_v4.py 2>&1 |
             tee "$ASI_TRUST_OUTPUT/evidence-verification.log"
 
       - name: Upload trust-anchor evidence

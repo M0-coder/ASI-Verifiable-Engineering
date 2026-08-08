@@ -1,79 +1,57 @@
 # ASI Trust Anchor
 
-This directory contains the verifier trusted from the immutable workflow commit,
-not from pull-request code.
+`guardian/**` is the privileged verification boundary for this repository. Pull-request code remains unprivileged and is never executed with privileged repository credentials by the Trust Anchor.
 
-## BIRTH-07 authority split
+## Current contract
 
-Policy v4 partitions required gates into two disjoint authorities:
+- Trust policy schema: `v4`
+- Trust policy instance revision: `5`
+- Trust contract: `v6`
+- Runtime verifier generation: `verify_run_v4.py`
+- Artifact identity: `v2`
+- Required trusted check: `ASI Trust Anchor`
 
-- `source_required_gates`: evidence the unprivileged `Validate ASI Skill` workflow
-  must measure and bind.
-- `trusted_required_gates`: evidence that only the trust anchor may establish.
+The policy instance protects the whole active control plane and portable Skill source:
 
-`branch_protection` is the sole trusted gate. The producer must leave it
-`not_verified` and must not publish gate evidence for it. `verify_run_v3.py`
-observes branch protection with the read-only administrative token and validates
-that `ASI Trust Anchor` is strict, app-bound, enforced for administrators, and
-cannot be bypassed by force-push or deletion settings.
+- `.asi/**`
+- `.github/workflows/**`
+- `guardian/**`
+- `producer/**`
+- `skills/asi-verifiable-engineering/**`
+- `tools/**`
 
-The source `decision.json` is explicitly a non-authoritative claim. The trust
-anchor derives acceptance from verified source gates, trusted gates, exact
-artifact identity, protected-path authorization, and package bytes.
+`policy_contract.py`, `verify_contract.py`, and `verify_run_v4.py` enforce that these protection domains cannot silently disappear from a future policy revision.
 
-## H1 control-plane exceptions
+## Gate ownership
 
-A protected-path exception may still come from a static policy entry, but policy
-v4 additionally supports `owner_comment_v1`. H1 identity is bound primarily to
-the stable numeric GitHub `user_id`; the login stored in policy is informational
-metadata and may change without changing authority.
+`source_required_gates` belong to the unprivileged `Validate ASI Skill` producer. `trusted_required_gates` belong to this boundary.
 
-Before accepting an owner comment, the trust anchor fetches current repository
-metadata and requires the configured stable H1 identity to match the live
-repository owner. It then accepts a PR Conversation comment only when:
+`branch_protection` is the sole trusted gate. The producer must leave it unverified and must not emit source evidence claiming it passed.
 
-- the comment author's numeric GitHub `user.id` matches an authorized stable ID;
-- GitHub reports `author_association: OWNER`;
-- the comment begins with `ASI-H1-EXCEPTION-V1`;
-- the JSON payload binds exact PR number, base SHA, head SHA, complete protected
-  path set, reason, and unexpired timestamp;
-- `authorization_level` is `H1`;
-- `authorization_scope` is `control-plane-exception-only`;
-- `merge_authorized` is exactly `false`.
+The producer's `decision.json` is non-authoritative. The Trust Anchor derives acceptance after verifying source gates, trusted gates, candidate/artifact identity, protected-path authorization, package bytes, and branch-protection binding.
 
-A login rename with the same numeric ID does not invalidate the identity. A
-mismatched numeric ID, invalid owner relationship, stale scope, stale SHA, or
-expired authorization fails closed.
+## Stable H1 identity
 
-This exception permits the trust anchor to evaluate a protected control-plane
-change. It is **not** merge authorization. A separate explicit owner decision is
-still required before any H1 merge.
+Protected-path evaluation may use `owner_comment_v1`. H1 identity binds primarily to the stable numeric GitHub user ID; login is diagnostic metadata.
 
-No H1 exception is created by BIRTH-07 for PR #6.
+An accepted exception must bind exact repository owner stable user ID, PR number, base SHA, head SHA, complete protected path set, reason, unexpired timestamp, `authorization_level = H1`, `authorization_scope = control-plane-exception-only`, and `merge_authorized = false`.
 
-## Bootstrap boundary
+An exception permits evaluation of a protected-path change. It is not merge authorization.
 
-Because the currently installed policy v2 has an empty `bootstrap_exceptions`
-list and `ASI Trust Anchor` is already mandatory on `main`, BIRTH-07 itself
-cannot be merged by pretending to satisfy the old trust anchor. That circular
-bootstrap is intentionally reported rather than bypassed.
+## Compatibility helpers
 
-BIRTH-07 must remain draft until there is a separately authorized transition
-that preserves the required check. The legacy PR #1 remains frozen.
+`verify_run_v4.py` validates the current policy instance and delegates the established evidence protocol to `verify_run_v3.py`. The v3 implementation imports `verify_run.py` and `verify_run_v2.py` for mature helper functions and artifact/archive compatibility. Those files are therefore **active compatibility modules**, not dead code. Do not delete them solely because their filenames are older.
 
-## Artifact identity and archive safety
+The immutable trust-anchor commit binds the complete helper tree even when the compact provenance report highlights the top-level runtime verifier digest.
 
-Artifact identity remains v2:
+## Archive safety
 
-`asi-evidence-<run_id>-attempt-<run_attempt>-<head_sha>-<evaluated_sha>`
+Artifact extraction rejects path traversal, absolute/unsafe paths, duplicate names, symlinks, encrypted/unsupported entries, excessive compressed/uncompressed size, excessive member count, and excessive compression ratio according to `trust-policy.json`.
 
-Archive extraction keeps the BIRTH-05 limits for path traversal, duplicates,
-symlinks, encryption, compression methods, file count, member size, total
-expanded size, and compression ratio. Trust-anchor provenance remains bound to
-the immutable workflow SHA and workflow/policy/verifier digests.
+## Provenance
 
-## Contract version
+The trusted workflow checks out `${{ github.workflow_sha }}` and verifies that the checked-out commit equals the immutable workflow SHA. Reports bind the trust-anchor commit plus workflow, policy, and top-level verifier digests.
 
-BIRTH-07.2 uses trust policy v4 and contract v5. `verify_run_v3.py` keeps its
-filename because the verifier generation did not change; its accepted policy
-schema and H1 identity semantics did.
+## Transition
+
+Changes to this control plane can create a circular bootstrap when `main` still runs an older policy/verifier. Follow `BOOTSTRAP-TRANSITION.md`; never remove the required check or weaken branch protection as a shortcut.

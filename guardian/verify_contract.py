@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify that the trust-anchor workflow, policy, and verifier agree exactly."""
+"""Verify that the trust-anchor workflow, policy, verifier, and policy instance agree exactly."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ import re
 import sys
 from pathlib import Path
 from typing import Any
+
+import policy_contract
 
 WORKFLOW_NAME = re.compile(r"^name:\s*(?P<name>[^\n]+?)\s*$", re.MULTILINE)
 JOB_NAME = re.compile(
@@ -29,18 +31,11 @@ REQUIRED_WORKFLOW_SNIPPETS = {
     "workflow_run_trigger": "  workflow_run:",
     "immutable_workflow_checkout": "          ref: ${{ github.workflow_sha }}",
     "trust_anchor_sha_env": "      ASI_TRUST_ANCHOR_SHA: ${{ github.workflow_sha }}",
-    "trusted_v3_verifier_env": "      ASI_TRUST_VERIFIER: guardian/verify_run_v3.py",
-    "trusted_v3_verifier": "          python3 guardian/verify_run_v3.py 2>&1 |",
-    "immutable_checkout_guard": (
-        '          test "$(git rev-parse HEAD)" = "$ASI_TRUST_ANCHOR_SHA"'
-    ),
-    "runtime_output_env": (
-        '          echo "ASI_TRUST_OUTPUT=$RUNNER_TEMP/asi-trust-anchor" '
-        '>> "$GITHUB_ENV"'
-    ),
-    "runtime_output_directory": (
-        '          mkdir -p "$RUNNER_TEMP/asi-trust-anchor"'
-    ),
+    "trusted_v4_verifier_env": "      ASI_TRUST_VERIFIER: guardian/verify_run_v4.py",
+    "trusted_v4_verifier": "          python3 guardian/verify_run_v4.py 2>&1 |",
+    "immutable_checkout_guard": '          test "$(git rev-parse HEAD)" = "$ASI_TRUST_ANCHOR_SHA"',
+    "runtime_output_env": '          echo "ASI_TRUST_OUTPUT=$RUNNER_TEMP/asi-trust-anchor" >> "$GITHUB_ENV"',
+    "runtime_output_directory": '          mkdir -p "$RUNNER_TEMP/asi-trust-anchor"',
     "registration_event_guard": "        if: github.event_name == 'workflow_dispatch'",
     "registration_ref_guard": '          test "$GITHUB_REF" = "refs/heads/main"',
     "registration_sha_guard": '          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"',
@@ -73,12 +68,7 @@ def _verify_job_env_lines(workflow_text: str) -> list[str]:
         if line == "  verify:":
             in_verify = True
             continue
-        if (
-            in_verify
-            and line.startswith("  ")
-            and not line.startswith("    ")
-            and line.strip()
-        ):
+        if in_verify and line.startswith("  ") and not line.startswith("    ") and line.strip():
             break
         if in_verify and line == "    env:":
             in_env = True
@@ -163,6 +153,8 @@ def evaluate_contract(
 
     if "          ref: main" in workflow_text:
         missing.append("mobile_main_checkout_forbidden")
+    if "python3 guardian/verify_run_v3.py" in workflow_text:
+        missing.append("v3_runtime_downgrade_forbidden")
     if "python3 guardian/verify_run_v2.py" in workflow_text:
         missing.append("v2_runtime_downgrade_forbidden")
 
@@ -170,8 +162,7 @@ def evaluate_contract(
     if any("${{ runner." in line for line in job_env_lines):
         missing.append("runner_context_forbidden_in_job_env")
 
-    if policy.get("version") != 4:
-        missing.append("trust_policy_v4")
+    missing.extend(policy_contract.validate(policy))
     if policy.get("artifact_name_version") != 2:
         missing.append("artifact_name_contract_v2")
     if policy.get("bootstrap_exception_mode") != "owner_comment_v1":
@@ -190,8 +181,10 @@ def evaluate_contract(
         )
 
     return {
-        "contract_version": 5,
+        "contract_version": 6,
         "observed_names": observed_names,
+        "policy_schema_version": policy.get("version"),
+        "policy_revision": policy.get("revision"),
         "missing_or_invalid_controls": sorted(set(missing)),
         "passed": not missing,
     }

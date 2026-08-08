@@ -29,9 +29,11 @@ jobs:
       - name: Compile trusted verifier
         run: >-
           python3 -m py_compile
+          guardian/policy_contract.py
           guardian/verify_run.py
           guardian/verify_run_v2.py
           guardian/verify_run_v3.py
+          guardian/verify_run_v4.py
           guardian/verify_protection_binding.py
           guardian/verify_contract.py
 

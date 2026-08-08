@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "max_files": 80,
+  "allowed_prefixes": [
+    ".asi/",
+    ".github/",
+    "guardian/",
+    "producer/",
+    "skills/",
+    "tools/"
+  ],
+  "allowed_root_files": [
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "README.md",
+    "SECURITY.md",
+    "VERSION"
+  ],
+  "forbidden_paths": [
+    ".env",
+    "id_rsa",
+    "id_ed25519",
+    "secrets.json"
+  ],
+  "note": "Repository-specific change budget. It is not part of the universal ASI Skill Core."
+}

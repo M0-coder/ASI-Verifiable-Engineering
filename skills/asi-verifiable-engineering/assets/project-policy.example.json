@@ -1,0 +1,23 @@
+{
+  "schema": "asi.project_policy.v1",
+  "policy_id": "REPLACE_ME",
+  "policy_version": 1,
+  "work_context_type": "REPOSITORY",
+  "authority": {
+    "project_policy_authority": "REPLACE_ME",
+    "merge_authority": "REPLACE_ME"
+  },
+  "risk_floor": "LOW",
+  "required_controls": [],
+  "protected_paths": [],
+  "target_environments": [],
+  "exceptions": {
+    "allowed": true,
+    "must_expire": true,
+    "must_preserve_raw_control_results": true
+  },
+  "notes": [
+    "This is an example representation. A specific filename is not a universal ASI requirement.",
+    "Project policy may escalate risk but may not silently relax universal doctrine."
+  ]
+}

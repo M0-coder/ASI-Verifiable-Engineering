@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "assurance_level": ["T0", "T1", "T2", "T3", "T4", "T5", "T6"],
+  "candidate_decision": ["PASS", "BLOCKED", "ESCALATE"],
+  "capability_availability": ["AVAILABLE", "UNAVAILABLE", "UNKNOWN"],
+  "control_maturity": ["EXPERIMENTAL", "SHADOW", "OBSERVED", "VALIDATED", "REQUIRED", "DEPRECATED", "RETIRED"],
+  "control_result": ["PASS", "FAIL", "NOT_VERIFIED", "INFRA_FAILURE"],
+  "evaluator_aggregate": ["CONSENSUS_PASS", "CONSENSUS_FAIL", "DISAGREEMENT", "INSUFFICIENT_EVIDENCE"],
+  "evidence_freshness": ["FRESH", "STALE_IDENTITY", "STALE_ENVIRONMENT", "SUPERSEDED"],
+  "evidence_maturity": ["E0", "E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8"]
+}

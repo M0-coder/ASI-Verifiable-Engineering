@@ -16,14 +16,13 @@
       "user_id": 295708153
     }
   ],
+  "policy_id": "asi-trust-policy",
   "protected_paths": [
     ".asi/**",
     ".github/workflows/**",
     "guardian/**",
-    "mypy.ini",
-    "requirements-ci.lock",
-    "skills/asi-verifiable-engineering/scripts/**",
-    "tests/**",
+    "producer/**",
+    "skills/asi-verifiable-engineering/**",
     "tools/**"
   ],
   "required_check": "ASI Trust Anchor",
@@ -43,6 +42,7 @@
     "independent_audit",
     "target_environment_observation"
   ],
+  "revision": 5,
   "source_required_gates": [
     "integrity",
     "format_check",
