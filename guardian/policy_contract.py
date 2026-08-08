@@ -7,12 +7,14 @@ from typing import Any
 
 POLICY_ID = "asi-trust-policy"
 POLICY_SCHEMA_VERSION = 4
-MIN_POLICY_REVISION = 5
+MIN_POLICY_REVISION = 6
 REQUIRED_PROTECTED_PATHS = {
     ".asi/**",
     ".github/workflows/**",
     "guardian/**",
+    "mypy.ini",
     "producer/**",
+    "requirements-ci.lock",
     "skills/asi-verifiable-engineering/**",
     "tools/**",
 }

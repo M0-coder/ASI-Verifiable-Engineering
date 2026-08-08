@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "max_files": 80,
   "allowed_prefixes": [
     ".asi/",
@@ -14,7 +14,9 @@
     "CHANGELOG.md",
     "README.md",
     "SECURITY.md",
-    "VERSION"
+    "VERSION",
+    "mypy.ini",
+    "requirements-ci.lock"
   ],
   "forbidden_paths": [
     ".env",

@@ -5,18 +5,20 @@
 ## Current contract
 
 - Trust policy schema: `v4`
-- Trust policy instance revision: `5`
+- Trust policy instance revision: `6`
 - Trust contract: `v6`
 - Runtime verifier generation: `verify_run_v4.py`
 - Artifact identity: `v2`
 - Required trusted check: `ASI Trust Anchor`
 
-The policy instance protects the whole active control plane and portable Skill source:
+The policy instance protects the whole active control plane, CI typecheck inputs, and portable Skill source:
 
 - `.asi/**`
 - `.github/workflows/**`
 - `guardian/**`
+- `mypy.ini`
 - `producer/**`
+- `requirements-ci.lock`
 - `skills/asi-verifiable-engineering/**`
 - `tools/**`
 
@@ -43,6 +45,10 @@ An exception permits evaluation of a protected-path change. It is not merge auth
 `verify_run_v4.py` validates the current policy instance and delegates the established evidence protocol to `verify_run_v3.py`. The v3 implementation imports `verify_run.py` and `verify_run_v2.py` for mature helper functions and artifact/archive compatibility. Those files are therefore **active compatibility modules**, not dead code. Do not delete them solely because their filenames are older.
 
 The immutable trust-anchor commit binds the complete helper tree even when the compact provenance report highlights the top-level runtime verifier digest.
+
+## Typecheck boundary
+
+`mypy.ini` and `requirements-ci.lock` are protected control-plane inputs. `Validate ASI Skill` installs exact CI dependency versions and measures mypy over the current producer/tools and v4 Guardian contract surface. Legacy compatibility modules are kept outside the strict typecheck scope until they are refactored, and that scope must remain explicit in evidence.
 
 ## Archive safety
 

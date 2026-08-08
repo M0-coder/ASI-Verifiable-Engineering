@@ -13,6 +13,7 @@ A green `Validate ASI Skill` workflow means evidence production/transport comple
 - integrity / candidate identity / repository change budget;
 - format check;
 - AST lint;
+- strict mypy typecheck over the current producer/tools and v4 Guardian contract surface;
 - Python compile/build check;
 - portable package installability/structure validation;
 - producer and package-validator unit tests;
@@ -21,11 +22,11 @@ A green `Validate ASI Skill` workflow means evidence production/transport comple
 - stdlib/repository-local dependency scan;
 - reverse-apply rollback check.
 
-Controls for which no honest measurement exists remain `not_verified`; they are not converted to warnings or fabricated PASS values.
+The CI typechecker is version-locked by `requirements-ci.lock`; the exact scope is recorded in the gate command. Controls for which no honest measurement exists remain `not_verified`; they are not converted to warnings or fabricated PASS values.
 
 ## Package
 
-The producer now packages the real `skills/asi-verifiable-engineering/` tree. The old BIRTH-06 marker fixture is removed.
+The producer packages the real `skills/asi-verifiable-engineering/` tree. The old BIRTH-06 marker fixture is not part of the reconstructed source.
 
 The ZIP is deterministic by file order, timestamp, storage method, and file mode. CI records its SHA-256 in the evidence manifest.
 

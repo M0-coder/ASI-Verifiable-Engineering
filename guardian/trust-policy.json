@@ -21,7 +21,9 @@
     ".asi/**",
     ".github/workflows/**",
     "guardian/**",
+    "mypy.ini",
     "producer/**",
+    "requirements-ci.lock",
     "skills/asi-verifiable-engineering/**",
     "tools/**"
   ],
@@ -42,7 +44,7 @@
     "independent_audit",
     "target_environment_observation"
   ],
-  "revision": 5,
+  "revision": 6,
   "source_required_gates": [
     "integrity",
     "format_check",

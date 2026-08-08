@@ -33,6 +33,12 @@ jobs:
           python-version: "3.12"
           cache: ""
 
+      - name: Install version-locked CI typechecker
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --no-deps -r requirements-ci.lock
+          python -m mypy --version
+
       - name: Prepare evidence output
         run: |
           set -euo pipefail
@@ -69,6 +75,15 @@ jobs:
               --base-sha "$ASI_BASE_SHA" \
               --evaluated-sha "$ASI_EVALUATED_SHA"
 
+          gate typecheck \
+            "mypy 2.3.0 strict typecheck over current producer/tools and v4 Guardian contract surface" \
+            python -m mypy --config-file mypy.ini \
+              producer \
+              tools \
+              guardian/policy_contract.py \
+              guardian/verify_contract.py \
+              guardian/verify_run_v4.py
+
           gate build \
             "Compile every changed Python file" \
             python producer/gate_checks.py build \
@@ -97,7 +112,7 @@ jobs:
               --evaluated-sha "$ASI_EVALUATED_SHA"
 
           gate dependency_scan \
-            "Verify changed Python imports are stdlib or repository-local" \
+            "Verify changed Python imports are stdlib or repository-local; CI typechecker dependencies are separately version-locked" \
             python producer/gate_checks.py dependency-scan \
               --base-sha "$ASI_BASE_SHA" \
               --evaluated-sha "$ASI_EVALUATED_SHA"

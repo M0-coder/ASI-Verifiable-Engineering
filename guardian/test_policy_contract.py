@@ -23,9 +23,18 @@ class PolicyContractTests(unittest.TestCase):
         ]
         self.assertIn("protected_path:producer/**", policy_contract.validate(policy))
 
+    def test_typecheck_inputs_are_protected(self) -> None:
+        policy = self.policy()
+        policy["protected_paths"] = [
+            path for path in policy["protected_paths"] if path not in {"mypy.ini", "requirements-ci.lock"}
+        ]
+        findings = policy_contract.validate(policy)
+        self.assertIn("protected_path:mypy.ini", findings)
+        self.assertIn("protected_path:requirements-ci.lock", findings)
+
     def test_revision_must_be_current(self) -> None:
         policy = self.policy()
-        policy["revision"] = 4
+        policy["revision"] = 5
         self.assertIn("trust_policy_revision", policy_contract.validate(policy))
 
 
