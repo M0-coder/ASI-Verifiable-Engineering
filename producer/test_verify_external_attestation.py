@@ -96,6 +96,55 @@ class ExternalAttestationTests(unittest.TestCase):
         self.assertEqual("PASS", state)
         self.assertEqual(1, len(report["accepted"]))
 
+    def test_pass_with_findings_is_rejected_end_to_end(self) -> None:
+        raw = self.attestation()
+        audit = raw["audit"]
+        assert isinstance(audit, dict)
+        audit["findings"] = [
+            {
+                "id": "F-01",
+                "severity": "HIGH",
+                "material": True,
+                "blocking": True,
+            }
+        ]
+        errors = external.validate_attestation(
+            raw,
+            repository=self.repository,
+            pr_number=8,
+            head_sha=self.head,
+            builder_context_id=self.builder_context,
+            kind="independent-audit",
+            package_digest=None,
+        )
+        self.assertIn("audit_PASS_requires_no_findings", errors)
+
+        def loader_with_findings(
+            url: str, digest: str, repository: str
+        ) -> dict[str, Any]:
+            self.assertIn("raw.githubusercontent.com", url)
+            self.assertTrue(digest.startswith("sha256:"))
+            self.assertEqual(self.repository, repository)
+            return raw
+
+        state, report = external.evaluate_reviews(
+            [self.review()],
+            repository=self.repository,
+            pr_number=8,
+            head_sha=self.head,
+            builder_context_id=self.builder_context,
+            kind="independent-audit",
+            package_digest=None,
+            evidence_loader=loader_with_findings,
+        )
+        self.assertEqual("FAIL", state)
+        self.assertEqual(0, len(report["accepted"]))
+        self.assertEqual(1, len(report["rejected"]))
+        self.assertIn(
+            "audit_PASS_requires_no_findings",
+            report["rejected"][0]["reasons"],
+        )
+
     def test_same_context_is_rejected(self) -> None:
         raw = self.attestation()
         raw["auditor_context_id"] = self.builder_context
