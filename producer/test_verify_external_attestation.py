@@ -41,10 +41,15 @@ class ExternalAttestationTests(unittest.TestCase):
             },
         }
 
-    def review(self) -> dict[str, Any]:
+    def review(
+        self,
+        kind: str = "independent-audit",
+        review_id: int = 1,
+    ) -> dict[str, Any]:
         body = "\n".join(
             [
                 external.MARKER,
+                f"ASI-ATTESTATION-KIND: {kind}",
                 "ASI-ATTESTATION-URL: https://raw.githubusercontent.com/"
                 + self.repository
                 + "/"
@@ -54,7 +59,7 @@ class ExternalAttestationTests(unittest.TestCase):
             ]
         )
         return {
-            "id": 1,
+            "id": review_id,
             "body": body,
             "state": "COMMENTED",
             "commit_id": self.head,
@@ -95,6 +100,51 @@ class ExternalAttestationTests(unittest.TestCase):
         )
         self.assertEqual("PASS", state)
         self.assertEqual(1, len(report["accepted"]))
+
+    def test_independent_audit_review_does_not_fail_target_observation(self) -> None:
+        state, report = external.evaluate_reviews(
+            [self.review("independent-audit")],
+            repository=self.repository,
+            pr_number=8,
+            head_sha=self.head,
+            builder_context_id=self.builder_context,
+            kind="target-environment-observation",
+            package_digest=self.package_digest,
+            evidence_loader=self.loader,
+        )
+        self.assertEqual("NOT_VERIFIED", state)
+        self.assertEqual([], report["accepted"])
+        self.assertEqual([], report["rejected"])
+
+    def test_same_actor_reviews_are_routed_by_kind_without_shadowing(self) -> None:
+        reviews = [
+            self.review("independent-audit", review_id=1),
+            self.review("target-environment-observation", review_id=2),
+        ]
+        audit_state, audit_report = external.evaluate_reviews(
+            reviews,
+            repository=self.repository,
+            pr_number=8,
+            head_sha=self.head,
+            builder_context_id=self.builder_context,
+            kind="independent-audit",
+            package_digest=None,
+            evidence_loader=self.loader,
+        )
+        target_state, target_report = external.evaluate_reviews(
+            reviews,
+            repository=self.repository,
+            pr_number=8,
+            head_sha=self.head,
+            builder_context_id=self.builder_context,
+            kind="target-environment-observation",
+            package_digest=self.package_digest,
+            evidence_loader=self.loader,
+        )
+        self.assertEqual("PASS", audit_state)
+        self.assertEqual("PASS", target_state)
+        self.assertEqual(1, audit_report["accepted"][0]["review_id"])
+        self.assertEqual(2, target_report["accepted"][0]["review_id"])
 
     def test_pass_with_findings_is_rejected_end_to_end(self) -> None:
         raw = self.attestation()
