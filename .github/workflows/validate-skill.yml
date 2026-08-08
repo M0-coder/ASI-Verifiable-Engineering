@@ -107,12 +107,13 @@ jobs:
               --evaluated-sha "$ASI_EVALUATED_SHA"
 
           gate typecheck \
-            "mypy 2.3.0 strict typecheck over current producer/tools and v4 Guardian contract surface" \
+            "mypy 2.3.0 strict typecheck over producer/tools and v3/v4 Guardian trust-anchor surfaces" \
             python -m mypy --config-file mypy.ini \
               producer \
               tools \
               guardian/policy_contract.py \
               guardian/verify_contract.py \
+              guardian/verify_run_v3.py \
               guardian/verify_run_v4.py
 
           gate build \
