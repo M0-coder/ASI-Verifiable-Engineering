@@ -112,6 +112,29 @@ def _gate_partition(policy: dict[str, Any]) -> list[str]:
     return missing
 
 
+def _h1_authorizer_contract(policy: dict[str, Any]) -> list[str]:
+    authorizers = policy.get("h1_authorizers")
+    if not isinstance(authorizers, list) or not authorizers:
+        return ["h1_authorizers"]
+    missing: list[str] = []
+    seen_ids: set[int] = set()
+    for item in authorizers:
+        if not isinstance(item, dict):
+            missing.append("h1_authorizers")
+            continue
+        user_id = item.get("user_id")
+        login = item.get("login")
+        if isinstance(user_id, bool) or not isinstance(user_id, int) or user_id <= 0:
+            missing.append("h1_authorizer_stable_user_id")
+        elif user_id in seen_ids:
+            missing.append("h1_authorizer_duplicate_user_id")
+        else:
+            seen_ids.add(user_id)
+        if not isinstance(login, str) or not login.strip():
+            missing.append("h1_authorizer_login_metadata")
+    return missing
+
+
 def evaluate_contract(
     workflow_text: str,
     policy: dict[str, Any],
@@ -147,15 +170,13 @@ def evaluate_contract(
     if any("${{ runner." in line for line in job_env_lines):
         missing.append("runner_context_forbidden_in_job_env")
 
-    if policy.get("version") != 3:
-        missing.append("trust_policy_v3")
+    if policy.get("version") != 4:
+        missing.append("trust_policy_v4")
     if policy.get("artifact_name_version") != 2:
         missing.append("artifact_name_contract_v2")
     if policy.get("bootstrap_exception_mode") != "owner_comment_v1":
         missing.append("owner_comment_exception_mode")
-    authorizers = policy.get("h1_authorizers")
-    if not isinstance(authorizers, list) or not authorizers or not all(isinstance(x, str) and x for x in authorizers):
-        missing.append("h1_authorizers")
+    missing.extend(_h1_authorizer_contract(policy))
     missing.extend(_gate_partition(policy))
 
     archive_limits = policy.get("archive_limits")
@@ -169,7 +190,7 @@ def evaluate_contract(
         )
 
     return {
-        "contract_version": 4,
+        "contract_version": 5,
         "observed_names": observed_names,
         "missing_or_invalid_controls": sorted(set(missing)),
         "passed": not missing,
