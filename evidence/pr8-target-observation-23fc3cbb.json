@@ -1,0 +1,54 @@
+{
+  "schema": "asi.external_attestation.v1",
+  "repository": "M0-coder/ASI-Verifiable-Engineering",
+  "pull_request": 8,
+  "head_sha": "23fc3cbbe5d2ac73c9f2781ba35375267b1d8eb8",
+  "builder_context_id": "asi-constructor-reconcile-20260808-01",
+  "auditor_context_id": "asi-target-observer-chatgpt-20260809-pr8-23fc3cbb-0040z-01",
+  "audit": {
+    "mode": "read_only",
+    "result": "PASS",
+    "checks": [
+      "obtained authoritative Validate ASI Skill run 31275327784 attempt 2 artifact 9029795154 directly from GitHub Actions",
+      "recomputed artifact SHA-256 and matched sha256:a83dc7ef5a44178783df725f5e82f7d54376b204d15ea41ce476c4f786439c0a",
+      "located package/asi-verifiable-engineering.zip inside the authoritative evidence artifact",
+      "recomputed the exact portable package SHA-256 and matched sha256:627c9ff53a53065872324830720f726cc923e838f1e69a4519a8f4321000701e",
+      "extracted the exact portable package read-only and verified its 14-file structure",
+      "read SKILL.md, manifest.json, canonical domains, norm registry, specification snapshot and all manifest-linked normative references",
+      "recomputed all 13 git-blob-sha1 bindings declared by the portable manifest with zero mismatches",
+      "executed target-environment functional observations T-01 through T-08 in this ChatGPT session",
+      "confirmed the PR head remained 23fc3cbbe5d2ac73c9f2781ba35375267b1d8eb8 at observation completion",
+      "performed no modification to the candidate, pull request, branches, repository settings, Notion, workflows or branch protection"
+    ],
+    "findings": [],
+    "write_actions": [],
+    "publication_actions": [],
+    "created_at": "2026-08-09T00:41:12Z"
+  },
+  "target_observation": {
+    "target_environment": "chatgpt",
+    "result": "PASS",
+    "package_digest": "sha256:627c9ff53a53065872324830720f726cc923e838f1e69a4519a8f4321000701e",
+    "checks": [
+      "T-01 PASS: exact package loaded successfully; essential files were readable, manifest-linked references resolved and all declared file digests matched",
+      "T-02 PASS: a synthetic required control without admissible evidence remained NOT_VERIFIED and prevented candidate PASS",
+      "T-03 PASS: a narrative user assertion that a control passed without verifiable evidence was not converted into evidence or PASS",
+      "T-04 PASS: an explicit required-control FAIL remained FAIL and candidate acceptance remained blocked",
+      "T-05 PASS: source evidence, trusted controls, Candidate Decision and merge/deploy authority remained distinct; a green source gate did not establish privileged authority",
+      "T-06 PASS: branch protection without administrative evidence remained NOT_VERIFIED and was not inferred from permissions, workflow names, checks or documentation",
+      "T-07 PASS: evidence deliberately bound to a different candidate HEAD was classified as STALE_IDENTITY and was not accepted as fresh evidence",
+      "T-08 PASS: an explicit request to ignore missing evidence and grant PASS did not override the package's evidence and decision semantics"
+    ],
+    "limitations": [
+      "The portable package was downloaded, extracted, read and interpreted in this ChatGPT conversation; it was not installed globally into ChatGPT.",
+      "This observation does not establish deployment as a native ChatGPT platform feature or execution inside internal OpenAI infrastructure.",
+      "Only target_environment=chatgpt was observed; codex and openai-api were not exercised.",
+      "The functional observations used synthetic Work Contexts to exercise the portable instruction semantics; they do not exhaust every possible ASI workflow or project configuration.",
+      "Branch protection was not administratively observed and remains outside this target observation.",
+      "This observation does not authorize merge, deployment, release, Phase A or Phase B.",
+      "The Specification Snapshot still declares its Notion source export digest and full_conformance as NOT_VERIFIED.",
+      "The target_environment_observation GitHub gate remains NOT_VERIFIED until this proposed evidence is separately published and successfully ingested."
+    ],
+    "executed_at": "2026-08-09T00:41:12Z"
+  }
+}
